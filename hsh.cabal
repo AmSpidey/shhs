@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3b8b7d63c40723dd3dae8e07e227e750ef557b79d046663c11b9b8eae33d2301
+-- hash: 298ecf907349b7660036dd844711bebba6cee07a7904c44b80951365a2839896
 
 name:           hsh
 version:        0.1.0.0
@@ -27,7 +27,7 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
+      Shell
   other-modules:
       Paths_hsh
   hs-source-dirs:

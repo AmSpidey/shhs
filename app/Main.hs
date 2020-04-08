@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import Shell
 
 main :: IO ()
-main = someFunc
+main = execShell
