@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 298ecf907349b7660036dd844711bebba6cee07a7904c44b80951365a2839896
+-- hash: cf57951ac8f03ba9536ad612bb63b3da12e873fbc3fb9450039ccc993672de75
 
 name:           hsh
 version:        0.1.0.0
@@ -33,8 +33,8 @@ library
   hs-source-dirs:
       src
   build-depends:
-      base >=4.7 && <5
-    , async
+      async
+    , base >=4.7 && <5
   default-language: Haskell2010
 
 executable hsh-exe
@@ -45,7 +45,8 @@ executable hsh-exe
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      async
+    , base >=4.7 && <5
     , hsh
   default-language: Haskell2010
 
@@ -58,6 +59,7 @@ test-suite hsh-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      async
+    , base >=4.7 && <5
     , hsh
   default-language: Haskell2010
