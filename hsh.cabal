@@ -34,6 +34,7 @@ library
       src
   build-depends:
       base >=4.7 && <5
+    , async
   default-language: Haskell2010
 
 executable hsh-exe
