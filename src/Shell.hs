@@ -1,13 +1,14 @@
 module Shell where
 
-import Control.Concurrent
-import Control.Concurrent.Async
+import Control.Monad.IO.Class
+import UnliftIO
 import Data.List
+import System.Console.Haskeline
 
 type ShellM = IO
-type EventResult = Char
+type EventResult = Maybe String
 
-handleEvent :: EventResult -> IO ([Async EventResult])
+handleEvent :: EventResult -> IO [Async EventResult]
 handleEvent e = undefined
 
 
@@ -21,6 +22,11 @@ eventsManager events = do
 
 execShell :: IO ()
 execShell = do
-  char <- async getChar
-  eventsManager ([char])
-  execShell
+  runInputT defaultSettings loop
+  where
+    loop :: InputT IO ()
+    loop = do
+      input <- async $ getInputLine "hashell$ "
+      liftIO $ eventsManager [input]
+      return ()
+      --eventsManager ([input])

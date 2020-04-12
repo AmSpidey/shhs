@@ -1,0 +1,3 @@
+[submodule "haskeline"]
+	path = haskeline
+	url = git@github.com:Joald/haskeline.git
