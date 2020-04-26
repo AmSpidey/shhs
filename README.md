@@ -1,5 +1,5 @@
 # hsh
-
+An OS-agnostic shell written in Haskell.
 
 ## Building with stack
 After cloning the repo, don't forget to run `git submodule update --remote --init` 
