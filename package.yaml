@@ -24,6 +24,9 @@ dependencies:
 - async 
 - haskeline
 - unliftio
+- containers
+- mtl
+- directory
 
 library:
   source-dirs: src
