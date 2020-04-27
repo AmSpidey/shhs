@@ -27,7 +27,8 @@ dependencies:
 - containers
 - mtl
 - directory
-
+- ansi-terminal >= 0.10
+- colour
 library:
   source-dirs: src
 
