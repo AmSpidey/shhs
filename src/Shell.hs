@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Shell where
 
 import System.Exit
@@ -9,37 +10,17 @@ import Data.Word (Word8)
 import Control.Monad.IO.Class
 import UnliftIO
 import Data.List
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import System.Console.Haskeline
 import Control.Monad.Reader
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import Abs
+import Parser
+import Utils
 
-data Val = VStr String
-
-type Path = String -- TODO: this should be an actual type
-
-type Env = Map String Val
-
-data ShellState = ShellState { shellStEnv :: Env, shellStPath :: Path }
-
-type ShellT = ReaderT (IORef ShellState)
-type Shell = ShellT (InputT IO)
-
-type EventResult = Maybe String
-
-type EventList = [Async EventResult]
-
-data Action = APrint String | AExit (Maybe Int)
-  deriving (Show, Eq)
-
-data Command = TmpCmd String [String] -- TODO: more sophisticated data type
-
-parseCmd :: String -> Shell Command
-parseCmd s = return $
-  case words s of
-    [] -> TmpCmd "" []
-    x : xs -> TmpCmd x xs -- TODO: escape the string
 
 getPath :: Shell Path
 getPath = do
@@ -53,12 +34,16 @@ setPath p = do
   modifyIORef stRef $ \st -> st {shellStPath = p}
 
 
-doInterpret :: Command -> Shell [Action] -- TODO: if this has access to IO, then could it not just perform the relevant actions?
-doInterpret (TmpCmd "pwd" []) = (:[]) . APrint <$> getPath
-doInterpret (TmpCmd "cd" (dir:_)) = do
+doInterpret :: Command -> Shell [Action]
+-- TODO: if this has access to IO, then could it not just perform the relevant actions?
+-- For now the actions are left in just in case we want to do something in another place.
+doInterpret (GenericCmd "pwd" _) = pure . APrint <$> getPath
+doInterpret (GenericCmd "cd" (dir:_)) = do
   path <- getPath
-  absPath <- liftIO $ withCurrentDirectory path $ canonicalizePath dir
-  setPath absPath
+  absPath <- liftIO $ withCurrentDirectory path $ canonicalizePath $ T.unpack dir
+  ifM (liftIO $ doesDirectoryExist absPath)
+    (setPath absPath)
+    (liftIO $ TIO.putStrLn $ "Error: no such directory: " `T.append` dir)
   return []
 doInterpret _ = return [] -- TODO: more commands :P
 
@@ -66,6 +51,7 @@ doInterpret _ = return [] -- TODO: more commands :P
 interpretCmd :: String -> Shell [Action]
 interpretCmd s = do
   cmd <- parseCmd s
+--  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
   doInterpret cmd
 
 handleEvent :: EventResult -> Shell [Action]
@@ -109,8 +95,7 @@ startShell = defaultRunShell loop
 defaultRunShell :: Shell a -> IO a
 defaultRunShell m = do
   st <- initState
-  stRef <- newIORef st
-  runInputT defaultSettings (runReaderT m stRef)
+  runShell st m
 
 runShell :: ShellState -> Shell a -> IO a
 runShell st m = do

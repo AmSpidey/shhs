@@ -29,6 +29,9 @@ dependencies:
 - directory
 - ansi-terminal >= 0.10
 - colour
+- text
+- megaparsec
+
 library:
   source-dirs: src
 
