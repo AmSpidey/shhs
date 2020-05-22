@@ -4,23 +4,28 @@ module Shell where
 import System.Exit
 import System.Environment
 import System.Directory
+import System.Process.Typed
 import System.Console.ANSI.Codes
+import System.Console.Haskeline
+
 import Data.Colour.SRGB
 import Data.Word (Word8)
-import Control.Monad.IO.Class
-import UnliftIO
 import Data.List
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import System.Console.Haskeline
-import Control.Monad.Reader
-import Data.Map (Map)
 import qualified Data.Map as Map
+
+import Control.Monad.Reader
+import Control.Monad.IO.Class
+
+import UnliftIO
 
 import Abs
 import Parser
 import Utils
 
+
+-- TODO: those [g|s]etters are similar, merge them somehow? Probably would require TemplateHaskell tho...
 
 getPath :: Shell Path
 getPath = do
@@ -32,6 +37,12 @@ setPath :: Path -> Shell ()
 setPath p = do
   stRef <- ask
   modifyIORef stRef $ \st -> st {shellStPath = p}
+
+setErrCode :: ExitCode -> Shell ()
+setErrCode i = do
+  stRef <- ask
+  modifyIORef stRef $ \st -> st {shellLastErrCode = i}
+
 
 
 doInterpret :: Command -> Shell [Action]
@@ -45,6 +56,10 @@ doInterpret (GenericCmd "cd" (dir:_)) = do
     (setPath absPath)
     (liftIO $ TIO.putStrLn $ "Error: no such directory: " `T.append` dir)
   return []
+doInterpret (GenericCmd name args) = do
+  ec <- runProcess (proc name $ map T.unpack args)
+  setErrCode ec
+  return []
 doInterpret _ = return [] -- TODO: more commands :P
 
 
@@ -55,7 +70,7 @@ interpretCmd s = do
   doInterpret cmd
 
 handleEvent :: EventResult -> Shell [Action]
-handleEvent Nothing = return [AExit Nothing]
+handleEvent Nothing = return [AExit ExitSuccess]
 handleEvent (Just s) = interpretCmd s
 
 
@@ -64,8 +79,7 @@ execAction = liftIO . go
   where
     go :: Action -> IO ()
     go (APrint s) = putStrLn s
-    go (AExit Nothing) = exitSuccess
-    go (AExit (Just code)) = exitWith (ExitFailure code)
+    go (AExit code) = exitWith code
 
 eventsManager :: EventList -> Shell ()
 eventsManager [] = return ()
@@ -105,7 +119,7 @@ runShell st m = do
 initState :: IO ShellState
 initState = do
   env <- getEnvironment
-  ShellState (Map.map VStr $ Map.fromList env) <$> getCurrentDirectory
+  ShellState (Map.map VStr $ Map.fromList env) <$> getCurrentDirectory <*> pure ExitSuccess
 
 
 hshMain :: IO ()

@@ -1,6 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, GADTs #-}
 module Parser (parseCmd) where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.Char
 import qualified Data.Text as T
@@ -18,12 +19,9 @@ parseCmd :: String -> Shell Command
 parseCmd = doParseLine . T.pack
 
 doParseLine :: Text -> Shell Command
-doParseLine t = do -- ugh this is ugly
+doParseLine t = do
   ecpeb <- runParserT commandParser "input command" t
-  (\f -> either f return ecpeb) $ \peb -> do
-      liftIO $ putStrLn $ errorBundlePretty peb
-      return DoNothing
-
+  either (\peb -> DoNothing <$ liftIO (putStrLn $ errorBundlePretty peb)) return ecpeb
 
 sc :: Parser ()
 sc = L.space space1 (L.skipLineComment "#") empty
@@ -34,11 +32,14 @@ lexeme = L.lexeme sc
 symbol :: Text -> Parser Text
 symbol = L.symbol sc
 
+integer :: Parser Integer
+integer = lexeme L.decimal
+
 stringLiteral :: Parser Text
 stringLiteral = T.pack <$> (char '\"' *> manyTill L.charLiteral (char '\"'))
 
 pName :: Parser String
-pName = lexeme ((:) <$> letterChar <*> many alphaNumChar <?> "variable")
+pName = lexeme ((:) <$> letterChar <*> many alphaNumChar <?> "command name")
 
 notSpace :: Parser Text
 notSpace = takeWhile1P Nothing (not . isSpace)
@@ -58,3 +59,19 @@ pCommand = do
   if name `elem` builtinNames
     then GenericCmd name <$> many genericArgument
     else GenericCmd name <$> many genericArgument
+
+genericCommandGuide :: ParseGuide [Text]
+genericCommandGuide = Many AnyStr
+
+parserFromGuide :: ParseGuide a -> Parser a
+parserFromGuide = go
+  where
+    go :: ParseGuide a -> Parser a
+    go NoArgs = return ()
+    go (Many l) = many (go l)
+    go (a :+: b) = (,) <$> go a <*> go b
+    go (a :>: b) = go a >> go b
+    go (ExactStr s) = symbol (T.pack s)
+    go (Discard a) = void (go a)
+    go AnyStr = genericArgument
+    go AnyInt = integer

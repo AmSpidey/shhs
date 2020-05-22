@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs, ExistentialQuantification #-}
 module Abs where
 
 import Control.Monad.Reader
@@ -7,6 +8,8 @@ import Data.Text (Text)
 import Data.Void
 
 import System.Console.Haskeline
+import System.Exit
+
 import Text.Megaparsec
 import UnliftIO
 
@@ -20,7 +23,7 @@ type Path = String -- TODO: this should be an actual type
 
 type Env = Map String Val
 
-data ShellState = ShellState { shellStEnv :: Env, shellStPath :: Path }
+data ShellState = ShellState { shellStEnv :: Env, shellStPath :: Path, shellLastErrCode :: ExitCode }
 
 type ShellT = ReaderT (IORef ShellState)
 type Shell = ShellT (InputT IO)
@@ -29,14 +32,28 @@ type EventResult = Maybe String
 
 type EventList = [Async EventResult]
 
-data Action = APrint String | AExit (Maybe Int)
+data Action = APrint String | AExit ExitCode
   deriving (Show, Eq)
 
 data Command
   = DoNothing
   | GenericCmd String [Text]
-  | TypedCmd String -- TODO type
-  deriving (Show)
+  | forall a. TypedCmd String (ParseGuide a)
+
+
+
+-- | Command type building blocks.
+-- Designed so that a Megaparsec parser made from them is well-typed.
+data ParseGuide a where
+  NoArgs   :: ParseGuide ()
+  Many     :: ParseGuide a -> ParseGuide [a]
+  (:+:)    :: ParseGuide a -> ParseGuide b -> ParseGuide (a, b)
+  (:>:)    :: ParseGuide a -> ParseGuide b -> ParseGuide b
+  ExactStr :: String -> ParseGuide Text
+  Discard  :: ParseGuide a -> ParseGuide ()
+  AnyStr   :: ParseGuide Text
+  AnyInt   :: ParseGuide Integer
+
 
 -- Parser types
 
