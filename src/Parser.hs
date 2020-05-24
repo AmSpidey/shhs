@@ -42,7 +42,7 @@ pName :: Parser String
 pName = lexeme ((:) <$> letterChar <*> many alphaNumChar <?> "command name")
 
 notSpace :: Parser Text
-notSpace = takeWhile1P Nothing (not . isSpace)
+notSpace = lexeme $ takeWhile1P Nothing (not . isSpace)
 
 genericArgument :: Parser Text
 genericArgument = stringLiteral <|> notSpace
