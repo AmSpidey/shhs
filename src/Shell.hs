@@ -11,6 +11,7 @@ import System.Console.Haskeline
 import Data.Colour.SRGB
 import Data.Word (Word8)
 import Data.List
+import qualified Data.Text.Read as TR
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Map as Map
@@ -56,7 +57,13 @@ doInterpret (GenericCmd "cd" (dir:_)) = do
     (setPath absPath)
     (liftIO $ TIO.putStrLn $ "Error: no such directory: " `T.append` dir)
   return []
-doInterpret (GenericCmd "exit" _) = return [AExit ExitSuccess]
+doInterpret (GenericCmd "exit" []) = return [AExit ExitSuccess]
+doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
+  (Right (exitCode, _)) ->
+    if exitCode == 0 then return [AExit ExitSuccess] else return [AExit $ ExitFailure exitCode]
+  (Left str) -> do
+    liftIO $ TIO.putStrLn $ "Error: wrong exit code: " `T.append` code
+    return []
 doInterpret (GenericCmd name args) = do
   path <- getPath
   ec <- liftIO $ withCurrentDirectory path $ runProcess (proc name $ map T.unpack args)
