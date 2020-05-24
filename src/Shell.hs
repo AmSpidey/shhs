@@ -57,7 +57,8 @@ doInterpret (GenericCmd "cd" (dir:_)) = do
     (liftIO $ TIO.putStrLn $ "Error: no such directory: " `T.append` dir)
   return []
 doInterpret (GenericCmd name args) = do
-  ec <- runProcess (proc name $ map T.unpack args)
+  path <- getPath
+  ec <- liftIO $ withCurrentDirectory path $ runProcess (proc name $ map T.unpack args)
   setErrCode ec
   return []
 doInterpret _ = return [] -- TODO: more commands :P
