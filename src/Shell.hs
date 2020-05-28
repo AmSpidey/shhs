@@ -18,6 +18,7 @@ import qualified Data.Map as Map
 
 import Control.Monad.Reader
 import Control.Monad.IO.Class
+import qualified Control.Exception as E
 
 import UnliftIO
 
@@ -44,8 +45,6 @@ setErrCode i = do
   stRef <- ask
   modifyIORef stRef $ \st -> st {shellLastErrCode = i}
 
-
-
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
 -- For now the actions are left in just in case we want to do something in another place.
@@ -66,7 +65,12 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
     return []
 doInterpret (GenericCmd name args) = do
   path <- getPath
-  ec <- liftIO $ withCurrentDirectory path $ runProcess (proc name $ map T.unpack args)
+  ec <- liftIO $ catch (withCurrentDirectory path $ runProcess (proc name $ map T.unpack args))
+    (\e -> do
+              let err = show (e :: IOException)
+              putStrLn ("Couldn't execute the command with exception: " ++ err)
+              return (ExitFailure 666)
+              )
   setErrCode ec
   return []
 doInterpret _ = return [] -- TODO: more commands :P
