@@ -3,6 +3,7 @@ module Parser (parseCmd) where
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Combinators.Expr
 import Data.Char
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -11,6 +12,56 @@ import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import Abs
 import Builtins
+
+pString :: Parser Expr
+pString = do
+  var <- pName
+  return $ Var (T.pack var)
+
+pVariable :: Parser Expr
+pVariable = pString <?> "variable"
+
+pInteger :: Parser Expr
+pInteger = do
+  int <- integer
+  return $ Int int
+
+pLit :: Parser Expr
+pLit = do
+  s <- stringLiteral
+  return $ Lit s --quotes pString
+
+parens :: Parser a -> Parser a
+parens = between (symbol "(") (symbol ")")
+
+pTerm :: Parser Expr
+pTerm = choice
+  [ parens pExpr
+  , pLit
+  , pVariable
+  , pInteger
+  ]
+
+pExpr :: Parser Expr
+pExpr = makeExprParser pTerm operatorTable
+
+operatorTable :: [[Operator Parser Expr]]
+operatorTable =
+  [ [ prefix "-" Negation
+    , prefix "+" id
+    ]
+  , [ binary "*" Product
+    ]
+  , [ binary "+" Sum
+    , binary "-" Subtr
+    ]
+  ]
+
+binary :: Text -> (Expr -> Expr -> Expr) -> Operator Parser Expr
+binary  name f = InfixL  (f <$ symbol name)
+
+prefix :: Text -> (Expr -> Expr) -> Operator Parser Expr
+prefix  name f = Prefix  (f <$ symbol name)
 
 -- | Parsing utilities.
 -- Parsing is done on Text instead of String to improve performance when parsing source code files.
@@ -53,12 +104,26 @@ commandParser = noCommand <|> pCommand
 noCommand :: Parser Command
 noCommand = DoNothing <$ eof
 
+pLet :: Parser Command
+pLet = do
+  (name, expr) <- parser
+  return $ DeclCmd name expr
+  where
+  parser = do
+    var <- pName
+    symbol "="
+    expr <- pExpr
+    return (var, expr)
+
 pCommand :: Parser Command
 pCommand = do
   name <- pName
-  if name `elem` builtinNames
-    then GenericCmd name <$> many genericArgument
-    else GenericCmd name <$> many genericArgument
+  if name == "let"
+    then pLet
+    else
+      if name `elem` builtinNames
+        then GenericCmd name <$> many genericArgument
+        else GenericCmd name <$> many genericArgument
 
 genericCommandGuide :: ParseGuide [Text]
 genericCommandGuide = Many AnyStr

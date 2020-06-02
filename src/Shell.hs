@@ -9,6 +9,7 @@ import System.Console.ANSI.Codes
 import System.Console.Haskeline
 
 import Data.Colour.SRGB
+import Data.Maybe
 import Data.Word (Word8)
 import Data.List
 import qualified Data.Text.Read as TR
@@ -26,6 +27,24 @@ import Abs
 import Parser
 import Utils
 
+evalExpr :: Expr -> Shell Val
+evalExpr (Var s) = getVar (T.unpack s)
+evalExpr (Lit s) = return $ VStr s
+evalExpr (Int i) = return $ VInt i
+evalExpr (Negation expr) = evalExpr $ Product (Int (-1)) expr
+evalExpr (Sum expr1 expr2) = do
+  val1 <- evalExpr expr1
+  val2 <- evalExpr expr2
+  return $ val1 + val2
+evalExpr (Subtr expr1 expr2) = do
+  val1 <- evalExpr expr1
+  val2 <- evalExpr expr2
+  return $ val1 - val2
+evalExpr (Product expr1 expr2) = do
+  val1 <- evalExpr expr1
+  val2 <- evalExpr expr2
+  return $ val1 * val2
+
 
 -- TODO: those [g|s]etters are similar, merge them somehow? Probably would require TemplateHaskell tho...
 
@@ -39,6 +58,18 @@ setPath :: Path -> Shell ()
 setPath p = do
   stRef <- ask
   modifyIORef stRef $ \st -> st {shellStPath = p}
+
+setVar :: String -> Val -> Shell ()
+setVar name val = do
+  stRef <- ask
+  modifyIORef stRef $ \st -> st {shellStEnv = Map.insert name val $ shellStEnv st}
+
+getVar :: String -> Shell Val
+getVar name = do
+ stRef <- ask
+ st <- readIORef stRef
+ let mt = fromJust $ Map.lookup name $ shellStEnv st --TODO: handle this potential error. We should implement error handling...
+ return mt
 
 setErrCode :: ExitCode -> Shell ()
 setErrCode i = do
@@ -63,6 +94,11 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   (Left str) -> do
     liftIO $ TIO.putStrLn $ "Error: wrong exit code: " `T.append` code
     return []
+doInterpret (DeclCmd var expr) = do
+  val <- evalExpr expr
+  setVar var val
+  liftIO $ putStrLn (show var ++ show val)
+  return []
 doInterpret (GenericCmd name args) = do
   path <- getPath
   ec <- liftIO $ catch (withCurrentDirectory path $ runProcess (proc name $ map T.unpack args))
@@ -132,7 +168,7 @@ runShell st m = do
 initState :: IO ShellState
 initState = do
   env <- getEnvironment
-  ShellState (Map.map VStr $ Map.fromList env) <$> getCurrentDirectory <*> pure ExitSuccess
+  ShellState (Map.map VStr (T.pack <$> Map.fromList env)) <$> getCurrentDirectory <*> pure ExitSuccess
 
 
 hshMain :: IO ()
