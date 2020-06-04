@@ -1,7 +1,9 @@
 {-# LANGUAGE GADTs, ExistentialQuantification #-}
 module Abs where
 
+import qualified Control.Monad.State.Strict as MTL
 import Control.Monad.Reader
+import Control.Monad.Except
 import Data.IORef
 import Data.Map (Map)
 import Data.Text (Text)
@@ -27,11 +29,6 @@ data Expr
   deriving (Eq, Ord, Show)
 
 data Val = VStr Text | VInt Integer deriving (Show)
-
-instance Num Val where
-  VInt a + VInt b = VInt $ a + b
-  VInt a - VInt b = VInt $ a - b
-  VInt a * VInt b = VInt $ a * b
 
 type Path = String -- TODO: this should be an actual type
 
@@ -72,7 +69,6 @@ data ParseGuide a where
 -- Parser types
 
 type Parser = ParsecT Void Text Shell
+type Preprocess = ParsecT Void Text (ShellT (MTL.State Int))
 
--- Errors
-
---TODO: error handling.
+type Err = String

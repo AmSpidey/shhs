@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, GADTs #-}
-module Parser (parseCmd) where
+module Parser (parseCmd, doPreprocess) where
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -7,29 +7,55 @@ import Control.Monad.Combinators.Expr
 import Data.Char
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.Maybe
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
+
 import Abs
 import Builtins
+import Utils
 
-pString :: Parser Expr
-pString = do
-  var <- pName
-  return $ Var (T.pack var)
+-- | Preprocessing part.
 
-pVariable :: Parser Expr
-pVariable = pString <?> "variable"
+doPreprocess :: String -> Shell String
+doPreprocess t = do
+  ecpeb <- runParserT (linePreprocessor 0) "preprocessing" $ T.pack t
+  either (\peb -> t <$ liftIO (putStrLn $ errorBundlePretty peb)) return ecpeb
+
+linePreprocessor :: Integer -> Parser String
+linePreprocessor acc = do
+  x <- optional pCharAndEscape
+  case x of
+    Nothing -> return ""
+    Just x' -> do
+      let escape = x' == '\\'
+      let acc' = if escape then acc + 1 else 0
+      if x' == '$' && acc `mod` 2 == 0 
+        then do
+          val <- preprocessVar  
+          next <- linePreprocessor acc'
+          return $ val ++ next
+        else do
+          next <- linePreprocessor acc'
+          return $ (if escape && acc' `mod` 2 == 1 then "" else [x']) ++ next
+
+preprocessVar :: Parser String
+preprocessVar = do
+    var <- pName
+    val <- getVar var
+    return $ show $ fromMaybe (VStr "") val
+
+pCharAndEscape :: Parser Char
+pCharAndEscape = try (char '\\') <|> L.charLiteral    
+
+-- | Parsing expressions.
 
 pInteger :: Parser Expr
-pInteger = do
-  int <- integer
-  return $ Int int
+pInteger = Int <$> integer
 
 pLit :: Parser Expr
-pLit = do
-  s <- stringLiteral
-  return $ Lit s --quotes pString
+pLit = Lit <$> stringLiteral
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
@@ -38,7 +64,6 @@ pTerm :: Parser Expr
 pTerm = choice
   [ parens pExpr
   , pLit
-  , pVariable
   , pInteger
   ]
 
@@ -47,7 +72,8 @@ pExpr = makeExprParser pTerm operatorTable
 
 operatorTable :: [[Operator Parser Expr]]
 operatorTable =
-  [ [ prefix "-" Negation
+  [
+    [ prefix "-" Negation
     , prefix "+" id
     ]
   , [ binary "*" Product
@@ -58,10 +84,10 @@ operatorTable =
   ]
 
 binary :: Text -> (Expr -> Expr -> Expr) -> Operator Parser Expr
-binary  name f = InfixL  (f <$ symbol name)
+binary name f = InfixL (f <$ symbol name)
 
 prefix :: Text -> (Expr -> Expr) -> Operator Parser Expr
-prefix  name f = Prefix  (f <$ symbol name)
+prefix name f = Prefix (f <$ symbol name)
 
 -- | Parsing utilities.
 -- Parsing is done on Text instead of String to improve performance when parsing source code files.
