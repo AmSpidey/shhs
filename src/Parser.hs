@@ -52,10 +52,10 @@ pCharAndEscape = try (char '\\') <|> L.charLiteral
 -- | Parsing expressions.
 
 pInteger :: Parser Expr
-pInteger = Int <$> integer
+pInteger = EInt <$> integer
 
 pLit :: Parser Expr
-pLit = Lit <$> stringLiteral
+pLit = ELit <$> stringLiteral
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
@@ -132,14 +132,10 @@ noCommand = DoNothing <$ eof
 
 pLet :: Parser Command
 pLet = do
-  (name, expr) <- parser
-  return $ DeclCmd name expr
-  where
-  parser = do
-    var <- pName
-    symbol "="
-    expr <- pExpr
-    return (var, expr)
+  var <- pName
+  symbol "="
+  expr <- pExpr
+  return $ DeclCmd var expr
 
 pCommand :: Parser Command
 pCommand = do

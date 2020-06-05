@@ -43,21 +43,13 @@ mul (VInt a) (VInt b) = return $ VInt $ a * b
 mul _ _ = throwError "Wrong type of arguments for multiplication"
 
 evalExpr :: Expr -> Except Err Val
-evalExpr (Lit s) = return $ VStr s
-evalExpr (Int i) = return $ VInt i
-evalExpr (Negation expr) = evalExpr $ Product (Int (-1)) expr
-evalExpr (Sum expr1 expr2) = do
-  val1 <- evalExpr expr1
-  val2 <- evalExpr expr2
-  add val1 val2
-evalExpr (Subtr expr1 expr2) = do
-  val1 <- evalExpr expr1
-  val2 <- evalExpr expr2
-  subt val1 val2
-evalExpr (Product expr1 expr2) = do
-  val1 <- evalExpr expr1
-  val2 <- evalExpr expr2
-  mul val1 val2
+evalExpr (ELit s) = return $ VStr s
+evalExpr (EInt i) = return $ VInt i
+evalExpr (Negation expr) = evalExpr $ Product (EInt (-1)) expr
+evalExpr (Sum expr1 expr2) = join $ add <$> evalExpr expr1 <*> evalExpr expr2
+evalExpr (Subtr expr1 expr2) = join $ subt <$> evalExpr expr1 <*> evalExpr expr2
+evalExpr (Product expr1 expr2) = join $ mul <$> evalExpr expr1 <*> evalExpr expr2
+evalExpr _ = throwError "Undefined type of expression"
 
 -- TODO: those [g|s]etters are similar, merge them somehow? Probably would require TemplateHaskell tho...
 
@@ -95,9 +87,8 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   (Left str) -> do
     liftIO $ TIO.putStrLn $ "Error: wrong exit code: " `T.append` code
     return []
-doInterpret (DeclCmd var expr) = do
-  either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
-  return []
+doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
+  >> return []
   where
   exprError = "Used wrong expression to declare a variable."
 doInterpret (GenericCmd name args) = do

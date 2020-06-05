@@ -18,8 +18,8 @@ import UnliftIO
 
 data Expr
   = Var Text
-  | Lit Text
-  | Int Integer
+  | ELit Text
+  | EInt Integer
   | Negation Expr
   | Sum      Expr Expr
   | Subtr    Expr Expr
