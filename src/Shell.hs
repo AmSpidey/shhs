@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Shell where
-import Replace.Megaparsec
 
 import System.Exit
 import System.Environment
