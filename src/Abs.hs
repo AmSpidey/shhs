@@ -16,8 +16,20 @@ import UnliftIO
 -- This is the file where we define types to avoid cyclic dependencies.
 -- No project file with actual code should be imported from here.
 
+data Expr
+  = Var Text
+  | ELit Text
+  | EInt Integer
+  | Negation Expr
+  | Sum      Expr Expr
+  | Subtr    Expr Expr
+  | Product  Expr Expr
+  deriving (Eq, Ord, Show)
 
-data Val = VStr String
+data Val = VStr Text | VInt Integer
+instance Show Val where
+  show (VStr t) = show t
+  show (VInt i) = show i
 
 type Path = String -- TODO: this should be an actual type
 
@@ -39,7 +51,7 @@ data Command
   = DoNothing
   | GenericCmd String [Text]
   | forall a. TypedCmd String (ParseGuide a)
-
+  | DeclCmd String Expr
 
 
 -- | Command type building blocks.
@@ -58,3 +70,5 @@ data ParseGuide a where
 -- Parser types
 
 type Parser = ParsecT Void Text Shell
+
+type Err = String

@@ -9,6 +9,7 @@ import System.Console.ANSI.Codes
 import System.Console.Haskeline
 
 import Data.Colour.SRGB
+import Data.Maybe
 import Data.Word (Word8)
 import Data.List
 import qualified Data.Text.Read as TR
@@ -16,16 +17,38 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Map as Map
 
+import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.IO.Class
 import qualified Control.Exception as E
-
 import UnliftIO
 
 import Abs
 import Parser
 import Utils
 
+-- Expressions evaluation
+
+add :: Val -> Val -> Except Err Val
+add (VInt a) (VInt b) = return $ VInt $ a + b
+add _ _ = throwError "Wrong type of arguments for addition"
+
+subt :: Val -> Val -> Except Err Val
+subt (VInt a) (VInt b) = return $ VInt $ a - b
+subt _ _= throwError "Wrong type of arguments for subtraction"
+
+mul :: Val -> Val -> Except Err Val
+mul (VInt a) (VInt b) = return $ VInt $ a * b
+mul _ _ = throwError "Wrong type of arguments for multiplication"
+
+evalExpr :: Expr -> Except Err Val
+evalExpr (ELit s) = return $ VStr s
+evalExpr (EInt i) = return $ VInt i
+evalExpr (Negation expr) = evalExpr $ Product (EInt (-1)) expr
+evalExpr (Sum expr1 expr2) = join $ add <$> evalExpr expr1 <*> evalExpr expr2
+evalExpr (Subtr expr1 expr2) = join $ subt <$> evalExpr expr1 <*> evalExpr expr2
+evalExpr (Product expr1 expr2) = join $ mul <$> evalExpr expr1 <*> evalExpr expr2
+evalExpr _ = throwError "Undefined type of expression"
 
 -- TODO: those [g|s]etters are similar, merge them somehow? Probably would require TemplateHaskell tho...
 
@@ -63,6 +86,10 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   (Left str) -> do
     liftIO $ TIO.putStrLn $ "Error: wrong exit code: " `T.append` code
     return []
+doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
+  >> return []
+  where
+  exprError = "Used wrong expression to declare a variable."
 doInterpret (GenericCmd name args) = do
   path <- getPath
   ec <- liftIO $ catch (withCurrentDirectory path $ runProcess (proc name $ map T.unpack args))
@@ -78,7 +105,10 @@ doInterpret _ = return [] -- TODO: more commands :P
 
 interpretCmd :: String -> Shell [Action]
 interpretCmd s = do
-  cmd <- parseCmd s
+  liftIO $ putStrLn s
+  s' <- doPreprocess s
+  liftIO $ putStrLn s'
+  cmd <- parseCmd s'
 --  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
   doInterpret cmd
 
@@ -132,7 +162,7 @@ runShell st m = do
 initState :: IO ShellState
 initState = do
   env <- getEnvironment
-  ShellState (Map.map VStr $ Map.fromList env) <$> getCurrentDirectory <*> pure ExitSuccess
+  ShellState (Map.map VStr (T.pack <$> Map.fromList env)) <$> getCurrentDirectory <*> pure ExitSuccess
 
 
 hshMain :: IO ()

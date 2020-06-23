@@ -31,6 +31,8 @@ dependencies:
 - colour
 - text
 - megaparsec
+- parser-combinators
+- replace-megaparsec
 - typed-process
 
 library:
