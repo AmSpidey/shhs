@@ -31,7 +31,7 @@ linePreprocessor acc = do
     Just x' -> do
       let escape = x' == '\\'
       let acc' = if escape then acc + 1 else 0
-      if x' == '$' && acc `mod` 2 == 0 
+      if x' == '$' && acc `mod` 2 == 0
         then do
           val <- preprocessVar  
           next <- linePreprocessor acc'
@@ -134,8 +134,8 @@ pLet :: Parser Command
 pLet = do
   var <- pName
   symbol "="
-  expr <- pExpr
-  return $ DeclCmd var expr
+  DeclCmd var <$> pExpr
+
 
 pCommand :: Parser Command
 pCommand = do

@@ -26,7 +26,10 @@ data Expr
   | Product  Expr Expr
   deriving (Eq, Ord, Show)
 
-data Val = VStr Text | VInt Integer deriving (Show)
+data Val = VStr Text | VInt Integer
+instance Show Val where
+  show (VStr t) = show t
+  show (VInt i) = show i
 
 type Path = String -- TODO: this should be an actual type
 
