@@ -4,7 +4,9 @@ module Abs where
 import Control.Monad.Reader
 import Data.IORef
 import Data.Map (Map)
+import Data.List (intercalate)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Void
 
 import System.Console.Haskeline
@@ -34,8 +36,15 @@ instance Show Val where
 type Path = String -- TODO: this should be an actual type
 
 type Env = Map String Val
+type AliasMap = Map String String
 
-data ShellState = ShellState { shellStEnv :: Env, shellStPath :: Path, shellLastErrCode :: ExitCode }
+data ShellState
+  = ShellState
+  { shellStEnv :: Env
+  , shellStPath :: Path
+  , shellLastErrCode :: ExitCode
+  , shellAliases :: AliasMap
+  }
 
 type ShellT = ReaderT (IORef ShellState)
 type Shell = ShellT (InputT IO)
@@ -52,7 +61,14 @@ data Command
   | GenericCmd String [Text]
   | forall a. TypedCmd String (ParseGuide a)
   | DeclCmd String Expr
+  | AliasCmd String String
 
+instance Show Command where
+  show DoNothing = "DoNothing"
+  show (GenericCmd name args) = "cmd{" ++ name ++ "}(" ++ intercalate ", " (map T.unpack args) ++ ")"
+  show (DeclCmd str e) = "let " ++ str ++ " = " ++ show e
+  show (AliasCmd a v) = "let alias " ++ a ++ " = " ++ v
+  show _ = error "cannot show :("
 
 -- | Command type building blocks.
 -- Designed so that a Megaparsec parser made from them is well-typed.

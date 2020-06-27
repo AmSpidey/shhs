@@ -15,7 +15,7 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import Abs
 import Builtins
 import Utils
-
+import StateUtils
 -- | Preprocessing part.
 
 doPreprocess :: String -> Shell String
@@ -47,7 +47,7 @@ preprocessVar = do
     return $ show $ fromMaybe (VStr "") val
 
 pCharAndEscape :: Parser Char
-pCharAndEscape = try (char '\\') <|> L.charLiteral    
+pCharAndEscape = try (char '\\') <|> L.charLiteral
 
 -- | Parsing expressions.
 
@@ -115,6 +115,9 @@ integer = lexeme L.decimal
 stringLiteral :: Parser Text
 stringLiteral = T.pack <$> (char '\"' *> manyTill L.charLiteral (char '\"'))
 
+pKeyword :: Text -> Parser Text
+pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
+
 pName :: Parser String
 pName = lexeme ((:) <$> letterChar <*> many alphaNumChar <?> "command name")
 
@@ -131,21 +134,39 @@ noCommand :: Parser Command
 noCommand = DoNothing <$ eof
 
 pLet :: Parser Command
-pLet = do
+pLet = pLetAlias <|> pLetVar
+
+pLetAlias :: Parser Command
+pLetAlias =
+  AliasCmd <$ pKeyword "alias" <*> pName <* symbol "=" <*> (T.unpack <$> genericArgument)
+
+pLetVar :: Parser Command
+pLetVar = do
   var <- pName
   symbol "="
   DeclCmd var <$> pExpr
 
+
+addPrefix :: String -> Parser ()
+addPrefix s = do
+  inp <- getInput
+-- TODO: this will not do when input is script file, O(n^2) complexity!
+  setInput $ T.snoc (T.pack s) ' ' `T.append` inp
+  inp' <- getInput
+  liftIO $ putStrLn $ "new input: \"" ++ T.unpack inp' ++ "\""
+
+addAliasPrefix :: String -> Parser ()
+addAliasPrefix s = getAlias s >>= addPrefix
 
 pCommand :: Parser Command
 pCommand = do
   name <- pName
   if name == "let"
     then pLet
-    else
-      if name `elem` builtinNames
-        then GenericCmd name <$> many genericArgument
-        else GenericCmd name <$> many genericArgument
+    else do
+    ifM (isAlias name) (addAliasPrefix name) (addPrefix name)
+    name' <- pName
+    GenericCmd name' <$> many genericArgument
 
 genericCommandGuide :: ParseGuide [Text]
 genericCommandGuide = Many AnyStr

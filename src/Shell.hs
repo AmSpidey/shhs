@@ -9,7 +9,6 @@ import System.Console.ANSI.Codes
 import System.Console.Haskeline
 
 import Data.Colour.SRGB
-import Data.Maybe
 import Data.Word (Word8)
 import Data.List
 import qualified Data.Text.Read as TR
@@ -19,13 +18,12 @@ import qualified Data.Map as Map
 
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.IO.Class
-import qualified Control.Exception as E
 import UnliftIO
 
 import Abs
 import Parser
 import Utils
+import StateUtils
 
 -- Expressions evaluation
 
@@ -50,23 +48,7 @@ evalExpr (Subtr expr1 expr2) = join $ subt <$> evalExpr expr1 <*> evalExpr expr2
 evalExpr (Product expr1 expr2) = join $ mul <$> evalExpr expr1 <*> evalExpr expr2
 evalExpr _ = throwError "Undefined type of expression"
 
--- TODO: those [g|s]etters are similar, merge them somehow? Probably would require TemplateHaskell tho...
 
-getPath :: Shell Path
-getPath = do
-  stRef <- ask
-  st <- readIORef stRef
-  return $ shellStPath st
-
-setPath :: Path -> Shell ()
-setPath p = do
-  stRef <- ask
-  modifyIORef stRef $ \st -> st {shellStPath = p}
-
-setErrCode :: ExitCode -> Shell ()
-setErrCode i = do
-  stRef <- ask
-  modifyIORef stRef $ \st -> st {shellLastErrCode = i}
 
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
@@ -81,15 +63,18 @@ doInterpret (GenericCmd "cd" (dir:_)) = do
   return []
 doInterpret (GenericCmd "exit" []) = return [AExit ExitSuccess]
 doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
-  (Right (exitCode, _)) ->
-    if exitCode == 0 then return [AExit ExitSuccess] else return [AExit $ ExitFailure exitCode]
-  (Left str) -> do
-    liftIO $ TIO.putStrLn $ "Error: wrong exit code: " `T.append` code
-    return []
+  Right (exitCode, _) -> return
+    [AExit $ if exitCode == 0 then ExitSuccess else ExitFailure exitCode]
+  Left str -> return [APrint $ "Error: wrong exit code: " ++ str]
+
 doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
   >> return []
   where
   exprError = "Used wrong expression to declare a variable."
+doInterpret (AliasCmd alias val) =
+  if alias == "let"
+    then setErrCode (ExitFailure 1) >> return [APrint "Cannot alias with the name \"let\"."]
+    else addAlias alias val >> return []
 doInterpret (GenericCmd name args) = do
   path <- getPath
   ec <- liftIO $ catch (withCurrentDirectory path $ runProcess (proc name $ map T.unpack args))
@@ -105,12 +90,12 @@ doInterpret _ = return [] -- TODO: more commands :P
 
 interpretCmd :: String -> Shell [Action]
 interpretCmd s = do
-  liftIO $ putStrLn s
+--  liftIO $ putStrLn s
   s' <- doPreprocess s
-  liftIO $ putStrLn s'
+--  liftIO $ putStrLn s'
   cmd <- parseCmd s'
---  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
-  doInterpret cmd
+  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
+--  doInterpret cmd
 
 handleEvent :: EventResult -> Shell [Action]
 handleEvent Nothing = return [AExit ExitSuccess]
@@ -162,7 +147,11 @@ runShell st m = do
 initState :: IO ShellState
 initState = do
   env <- getEnvironment
-  ShellState (Map.map VStr (T.pack <$> Map.fromList env)) <$> getCurrentDirectory <*> pure ExitSuccess
+  ShellState
+    (Map.map VStr (T.pack <$> Map.fromList env))
+    <$> getCurrentDirectory
+    <*> pure ExitSuccess
+    <*> pure Map.empty
 
 
 hshMain :: IO ()
