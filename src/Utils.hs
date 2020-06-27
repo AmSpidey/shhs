@@ -1,29 +1,5 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ConstraintKinds #-}
 
 module Utils where
-
-import Abs
-
-import qualified Data.Map as Map
-
-import Control.Monad.Reader
-import UnliftIO
-
-type VarReader m = (MonadReader (IORef ShellState) m, MonadIO m)
-
--- | Variables handling.
-
-setVar :: String -> Val -> Shell ()
-setVar name val = do
-  stRef <- ask
-  modifyIORef stRef $ \st -> st {shellStEnv = Map.insert name val $ shellStEnv st}
-
-getVar :: VarReader m => String -> m (Maybe Val)
-getVar name = do
- stRef <- ask
- st <- readIORef stRef
- return $ Map.lookup name $ shellStEnv st
 
 -- | The following 4 functions are adapted from the `extra` package.
 
