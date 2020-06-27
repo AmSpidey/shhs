@@ -94,8 +94,8 @@ interpretCmd s = do
   s' <- doPreprocess s
 --  liftIO $ putStrLn s'
   cmd <- parseCmd s'
-  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
---  doInterpret cmd
+--  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
+  doInterpret cmd
 
 handleEvent :: EventResult -> Shell [Action]
 handleEvent Nothing = return [AExit ExitSuccess]
