@@ -152,8 +152,8 @@ addPrefix s = do
   inp <- getInput
 -- TODO: this will not do when input is script file, O(n^2) complexity!
   setInput $ T.snoc (T.pack s) ' ' `T.append` inp
-  inp' <- getInput
-  liftIO $ putStrLn $ "new input: \"" ++ T.unpack inp' ++ "\""
+--  inp' <- getInput
+--  liftIO $ putStrLn $ "new input: \"" ++ T.unpack inp' ++ "\""
 
 addAliasPrefix :: String -> Parser ()
 addAliasPrefix s = getAlias s >>= addPrefix

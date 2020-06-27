@@ -11,6 +11,7 @@ import System.Console.Haskeline
 import Data.Colour.SRGB
 import Data.Word (Word8)
 import Data.List
+import Data.Text (Text)
 import qualified Data.Text.Read as TR
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -66,7 +67,9 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   Right (exitCode, _) -> return
     [AExit $ if exitCode == 0 then ExitSuccess else ExitFailure exitCode]
   Left str -> return [APrint $ "Error: wrong exit code: " ++ str]
-
+doInterpret (GenericCmd "run" args) = case args of
+  name:args' -> runProg (T.unpack name) args'
+  _ -> return [APrint "run: Nothing to execute."]
 doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
   >> return []
   where
@@ -75,27 +78,26 @@ doInterpret (AliasCmd alias val) =
   if alias == "let"
     then setErrCode (ExitFailure 1) >> return [APrint "Cannot alias with the name \"let\"."]
     else addAlias alias val >> return []
-doInterpret (GenericCmd name args) = do
+doInterpret (GenericCmd name args) = runProg name args
+doInterpret _ = return [] -- TODO: more commands :P
+
+runProg :: String -> [Text] -> Shell [Action]
+runProg name args = do
   path <- getPath
-  ec <- liftIO $ catch (withCurrentDirectory path $ runProcess (proc name $ map T.unpack args))
-    (\e -> do
-              let err = show (e :: IOException)
-              putStrLn ("Couldn't execute the command with exception: " ++ err)
-              return (ExitFailure 666)
-              )
+  ec <- liftIO $ catch (withCurrentDirectory path $ runProcess (proc name $ map T.unpack args)) $ \e ->
+    putStrLn ("Couldn't execute the command with exception: " ++ show (e :: IOException)) >> return (ExitFailure 666)
   setErrCode ec
   return []
-doInterpret _ = return [] -- TODO: more commands :P
 
 
 interpretCmd :: String -> Shell [Action]
-interpretCmd s = do
+interpretCmd s = doPreprocess s >>= parseCmd >>= doInterpret
 --  liftIO $ putStrLn s
-  s' <- doPreprocess s
+--  s' <- doPreprocess s
 --  liftIO $ putStrLn s'
-  cmd <- parseCmd s'
+--  cmd <- parseCmd s'
 --  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
-  doInterpret cmd
+--  doInterpret cmd
 
 handleEvent :: EventResult -> Shell [Action]
 handleEvent Nothing = return [AExit ExitSuccess]
