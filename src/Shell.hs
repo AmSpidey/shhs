@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Shell where
 
+import System.IO hiding (hClose)
 import System.Exit
 import System.Environment
 import System.Directory
@@ -49,7 +50,15 @@ evalExpr (Subtr expr1 expr2) = join $ subt <$> evalExpr expr1 <*> evalExpr expr2
 evalExpr (Product expr1 expr2) = join $ mul <$> evalExpr expr1 <*> evalExpr expr2
 evalExpr _ = throwError "Undefined type of expression"
 
+getStream :: Maybe Path -> IOMode -> IO (StreamSpec s (), Maybe Handle)
+getStream Nothing _ = return (inherit, Nothing)
+getStream (Just path) mode = do
+  handle <- openFile path mode
+  return (useHandleClose handle, Just handle)
 
+closeHandle :: Maybe Handle -> IO ()
+closeHandle Nothing = return ()
+closeHandle (Just h) = hClose h
 
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
@@ -79,16 +88,37 @@ doInterpret (AliasCmd alias val) =
     then setErrCode (ExitFailure 1) >> return [APrint "Cannot alias with the name \"let\"."]
     else addAlias alias val >> return []
 doInterpret (GenericCmd name args) = runProg name args
+doInterpret (Pipe src dst) = do
+  (filename, h) <- liftIO $ openTempFile "." "tmp"
+  liftIO $ hClose h
+  setStdoutPath filename
+  act <- doInterpret src
+  setStdinPath filename
+  doInterpret dst
+  liftIO $ removeFile filename
+  return act
+doInterpret (RedirectIn path cmd) = (setStdinPath path) >> (doInterpret cmd)
+doInterpret (RedirectOut path cmd) = (setStdoutPath path) >> (doInterpret cmd)
+doInterpret (RedirectErr path cmd) = (setStderrPath path) >> (doInterpret cmd)
+doInterpret _ = return [] -- TODO: more commands :P
 doInterpret _ = return [] -- TODO: more commands :P
 
 runProg :: String -> [Text] -> Shell [Action]
 runProg name args = do
   path <- getPath
-  ec <- liftIO $ catch (withCurrentDirectory path $ runProcess (proc name $ map T.unpack args)) $ \e ->
-    putStrLn ("Couldn't execute the command with exception: " ++ show (e :: IOException)) >> return (ExitFailure 666)
+  config <- getConfig
+  (stdinStream, stdinHandle) <- liftIO $ getStream (stdinPath config) ReadMode
+  (stdoutStream, stdoutHandle) <- liftIO $ getStream (stdoutPath config) WriteMode
+  (stderrStream, stderrHandle) <- liftIO $ getStream (stderrPath config) WriteMode
+  ec <- liftIO $ catch (withCurrentDirectory path $ runProcess $ setStderr stderrStream $ setStdout stdoutStream $ setStdin stdinStream (proc name $ map T.unpack args))
+    (\e -> putStrLn ("Couldn't execute the command with exception: " ++ show (e :: IOException))
+           >> return (ExitFailure 666))
+  liftIO $ closeHandle stdinHandle
+  liftIO $ closeHandle stdoutHandle
+  liftIO $ closeHandle stderrHandle
+  setConfig (\_ -> emptyConfig)
   setErrCode ec
   return []
-
 
 interpretCmd :: String -> Shell [Action]
 interpretCmd s = doPreprocess s >>= parseCmd >>= doInterpret
@@ -154,6 +184,7 @@ initState = do
     <$> getCurrentDirectory
     <*> pure ExitSuccess
     <*> pure Map.empty
+    <*> pure emptyConfig
 
 
 hshMain :: IO ()

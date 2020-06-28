@@ -65,3 +65,25 @@ isAlias s = (s `Map.member`) <$> getAliases
 getAlias :: ShM m => String -> m String
 getAlias s = (! s) <$> getAliases
 
+getConfig :: Shell ProcessConfig
+getConfig = do
+  stRef <- ask
+  st <- readIORef stRef
+  return $ processConfig st
+
+emptyConfig :: ProcessConfig
+emptyConfig = ProcessConfig { stdinPath = Nothing, stdoutPath = Nothing, stderrPath = Nothing}
+
+setConfig :: (ProcessConfig -> ProcessConfig) -> Shell ()
+setConfig modifier = do
+  stRef <- ask
+  modifyIORef stRef $ \st -> st {processConfig = modifier $ processConfig st}
+
+setStdinPath :: Path -> Shell ()
+setStdinPath path = setConfig (\config -> config { stdinPath = Just path })
+
+setStdoutPath :: Path -> Shell ()
+setStdoutPath path = setConfig (\config -> config { stdoutPath = Just path })
+
+setStderrPath :: Path -> Shell ()
+setStderrPath path = setConfig (\config -> config { stderrPath = Just path })
