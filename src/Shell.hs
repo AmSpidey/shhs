@@ -53,8 +53,8 @@ evalExpr _ = throwError "Undefined type of expression"
 getStream :: Maybe Path -> IOMode -> IO (StreamSpec s (), Maybe Handle)
 getStream Nothing _ = return (inherit, Nothing)
 getStream (Just path) mode = do
-  handle <- openFile path mode
-  return (useHandleClose handle, Just handle)
+  handle' <- openFile path mode
+  return (useHandleClose handle', Just handle')
 
 closeHandle :: Maybe Handle -> IO ()
 closeHandle Nothing = return ()
@@ -94,13 +94,12 @@ doInterpret (Pipe src dst) = do
   setStdoutPath filename
   act <- doInterpret src
   setStdinPath filename
-  doInterpret dst
+  act' <- doInterpret dst
   liftIO $ removeFile filename
-  return act
-doInterpret (RedirectIn path cmd) = (setStdinPath path) >> (doInterpret cmd)
-doInterpret (RedirectOut path cmd) = (setStdoutPath path) >> (doInterpret cmd)
-doInterpret (RedirectErr path cmd) = (setStderrPath path) >> (doInterpret cmd)
-doInterpret _ = return [] -- TODO: more commands :P
+  return $ act ++ act'
+doInterpret (RedirectIn path cmd) = setStdinPath path >> doInterpret cmd
+doInterpret (RedirectOut path cmd) = setStdoutPath path >> doInterpret cmd
+doInterpret (RedirectErr path cmd) = setStderrPath path >> doInterpret cmd
 doInterpret _ = return [] -- TODO: more commands :P
 
 runProg :: String -> [Text] -> Shell [Action]
@@ -116,7 +115,7 @@ runProg name args = do
   liftIO $ closeHandle stdinHandle
   liftIO $ closeHandle stdoutHandle
   liftIO $ closeHandle stderrHandle
-  setConfig (\_ -> emptyConfig)
+  setConfig $ const emptyConfig
   setErrCode ec
   return []
 

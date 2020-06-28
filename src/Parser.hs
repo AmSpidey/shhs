@@ -13,7 +13,6 @@ import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
 import Abs
-import Builtins
 import Utils
 import StateUtils
 
@@ -38,7 +37,7 @@ linePreprocessor acc = do
       let acc' = if escape then acc + 1 else 0
       if x' == '$' && acc `mod` 2 == 0
         then do
-          val <- preprocessVar  
+          val <- preprocessVar
           next <- linePreprocessor acc'
           return $ val ++ next
         else do
@@ -156,6 +155,7 @@ constructCommand name (("<", path):t) args = RedirectIn path $ constructCommand 
 constructCommand name ((">", path):t) args = RedirectOut path $ constructCommand name t args
 constructCommand name (("2>", path):t) args = RedirectErr path $ constructCommand name t args
 
+
 commandParser :: Parser Command
 commandParser = noCommand <|> pCommandList
 
@@ -195,11 +195,11 @@ pCommand = do
     else do
     ifM (isAlias name) (addAliasPrefix name) (addPrefix name)
     name' <- pName
-    (genericArgs, redirectArgs) <- distributeArgs <$> (many $ redirectArg <|> genericArg)
-    return $ constructCommand name redirectArgs genericArgs
+    (genericArgs, redirectArgs) <- distributeArgs <$> many (redirectArg <|> genericArg)
+    return $ constructCommand name' redirectArgs genericArgs
 
 pCommandList :: Parser Command
-pCommandList = (foldl1 (\lhs rhs -> Pipe lhs rhs)) <$> (pCommand `sepBy` (symbol "|"))
+pCommandList = foldl1 Pipe <$> pCommand `sepBy` symbol "|"
 
 genericCommandGuide :: ParseGuide [Text]
 genericCommandGuide = Many AnyStr
