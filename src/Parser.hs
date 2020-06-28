@@ -199,7 +199,7 @@ pCommand = do
     return $ constructCommand name' redirectArgs genericArgs
 
 pCommandList :: Parser Command
-pCommandList = foldl1 Pipe <$> pCommand `sepBy` symbol "|"
+pCommandList = foldl1 Pipe <$> pCommand `sepBy1` symbol "|"
 
 genericCommandGuide :: ParseGuide [Text]
 genericCommandGuide = Many AnyStr
