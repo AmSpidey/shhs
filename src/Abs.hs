@@ -75,6 +75,10 @@ instance Show Command where
   show (GenericCmd name args) = "cmd{" ++ name ++ "}(" ++ intercalate ", " (map T.unpack args) ++ ")"
   show (DeclCmd str e) = "let " ++ str ++ " = " ++ show e
   show (AliasCmd a v) = "let alias " ++ a ++ " = " ++ v
+  show (Pipe src dst) = "(" ++ show src ++ ") | (" ++ (show dst) ++ ")"
+  show (RedirectOut path cmd) = show cmd ++ " > " ++ (show path)
+  show (RedirectErr path cmd) = show cmd ++ " 2> " ++ (show path)
+  show (RedirectIn path cmd) = show cmd ++ " < " ++ (show path)
   show _ = error "cannot show :("
 
 -- | Command type building blocks.
