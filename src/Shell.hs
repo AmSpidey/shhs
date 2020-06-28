@@ -60,6 +60,12 @@ closeHandle :: Maybe Handle -> IO ()
 closeHandle Nothing = return ()
 closeHandle (Just h) = hClose h
 
+resolveLocalName :: String -> Shell String
+resolveLocalName name = do
+  path <- getPath
+  liftIO $ withCurrentDirectory path $ canonicalizePath name
+  
+
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
 -- For now the actions are left in just in case we want to do something in another place.
@@ -77,7 +83,9 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
     [AExit $ if exitCode == 0 then ExitSuccess else ExitFailure exitCode]
   Left str -> return [APrint $ "Error: wrong exit code: " ++ str]
 doInterpret (GenericCmd "run" args) = case args of
-  name:args' -> runProg (T.unpack name) args'
+  name:args' -> do
+    name' <- resolveLocalName $ T.unpack name
+    runProg name' args'
   _ -> return [APrint "run: Nothing to execute."]
 doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
   >> return []
