@@ -38,12 +38,15 @@ type Path = String -- TODO: this should be an actual type
 type Env = Map String Val
 type AliasMap = Map String String
 
+data ProcessConfig = ProcessConfig { stdinPath :: Maybe Path, stdoutPath :: Maybe Path, stderrPath ::  Maybe Path }
+
 data ShellState
   = ShellState
   { shellStEnv :: Env
   , shellStPath :: Path
   , shellLastErrCode :: ExitCode
   , shellAliases :: AliasMap
+  , processConfig :: ProcessConfig
   }
 
 type ShellT = ReaderT (IORef ShellState)
@@ -62,6 +65,10 @@ data Command
   | forall a. TypedCmd String (ParseGuide a)
   | DeclCmd String Expr
   | AliasCmd String String
+  | Pipe Command Command
+  | RedirectOut Path Command
+  | RedirectErr Path Command
+  | RedirectIn Path Command
 
 instance Show Command where
   show DoNothing = "DoNothing"
