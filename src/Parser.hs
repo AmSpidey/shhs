@@ -16,6 +16,11 @@ import Abs
 import Builtins
 import Utils
 import StateUtils
+
+-- | Type used for parsing command arguments
+
+data Arg = Generic Text | Redirect (Text, Path)
+
 -- | Preprocessing part.
 
 doPreprocess :: String -> Shell String
@@ -121,14 +126,38 @@ pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
 pName :: Parser String
 pName = lexeme ((:) <$> letterChar <*> many alphaNumChar <?> "command name")
 
-notSpace :: Parser Text
-notSpace = lexeme $ takeWhile1P Nothing (not . isSpace)
+notSpaceOrPipe :: Parser Text
+notSpaceOrPipe = lexeme $ takeWhile1P Nothing $ (not . isSpace) .&& (/= '|')
 
 genericArgument :: Parser Text
-genericArgument = stringLiteral <|> notSpace
+genericArgument = stringLiteral <|> notSpaceOrPipe
+
+genericArg :: Parser Arg
+genericArg = Generic <$> genericArgument
+
+redirectArg :: Parser Arg
+redirectArg = do
+  opName <- try $ choice $ symbol <$> [ "<", ">", "2>" ]
+  path <- T.unpack <$> notSpaceOrPipe
+  return $ Redirect (opName, path)
+
+distributeArgs :: [Arg] -> ([Text], [(Text, Path)])
+distributeArgs (Redirect (op, path):t) = (genericArgs, (op, path):redirectArgs)
+  where
+    (genericArgs, redirectArgs) = distributeArgs t
+distributeArgs (Generic arg:t) = (arg:genericArgs, redirectArgs)
+  where
+    (genericArgs, redirectArgs) = distributeArgs t
+distributeArgs [] = ([], [])
+
+constructCommand :: String -> [(Text, Path)] -> [Text] -> Command
+constructCommand name [] args = GenericCmd name args
+constructCommand name (("<", path):t) args = RedirectIn path $ constructCommand name t args
+constructCommand name ((">", path):t) args = RedirectOut path $ constructCommand name t args
+constructCommand name (("2>", path):t) args = RedirectErr path $ constructCommand name t args
 
 commandParser :: Parser Command
-commandParser = noCommand <|> pCommand
+commandParser = noCommand <|> pCommandList
 
 noCommand :: Parser Command
 noCommand = DoNothing <$ eof
@@ -166,7 +195,11 @@ pCommand = do
     else do
     ifM (isAlias name) (addAliasPrefix name) (addPrefix name)
     name' <- pName
-    GenericCmd name' <$> many genericArgument
+    (genericArgs, redirectArgs) <- distributeArgs <$> (many $ redirectArg <|> genericArg)
+    return $ constructCommand name redirectArgs genericArgs
+
+pCommandList :: Parser Command
+pCommandList = (foldl1 (\lhs rhs -> Pipe lhs rhs)) <$> (pCommand `sepBy` (symbol "|"))
 
 genericCommandGuide :: ParseGuide [Text]
 genericCommandGuide = Many AnyStr
