@@ -137,7 +137,7 @@ genericArg = Generic <$> genericArgument
 
 redirectArg :: Parser Arg
 redirectArg = do
-  opName <- try $ choice [ pKeyword "<", pKeyword ">", pKeyword "2>" ]
+  opName <- try $ choice $ symbol <$> [ "<", ">", "2>" ]
   path <- T.unpack <$> notSpaceOrPipe
   return $ Redirect (opName, path)
 
@@ -199,9 +199,7 @@ pCommand = do
     return $ constructCommand name redirectArgs genericArgs
 
 pCommandList :: Parser Command
-pCommandList = do
-  (h:t) <- pCommand `sepBy` (symbol "|")
-  return $ foldl (\lhs rhs -> Pipe lhs rhs) h t
+pCommandList = (foldl1 (\lhs rhs -> Pipe lhs rhs)) <$> (pCommand `sepBy` (symbol "|"))
 
 genericCommandGuide :: ParseGuide [Text]
 genericCommandGuide = Many AnyStr

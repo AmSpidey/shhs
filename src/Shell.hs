@@ -105,21 +105,15 @@ doInterpret (GenericCmd name args) = do
 doInterpret (Pipe src dst) = do
   (filename, h) <- liftIO $ openTempFile "." "tmp"
   liftIO $ hClose h
-  setConfig (\config -> config { stdoutPath = Just filename })
+  setStdoutPath filename
   act <- doInterpret src
-  setConfig (\config -> config { stdinPath = Just filename })
+  setStdinPath filename
   doInterpret dst
   liftIO $ removeFile filename
   return act
-doInterpret (RedirectIn path cmd) = do
-  setConfig (\config -> config { stdinPath = Just path })
-  doInterpret cmd
-doInterpret (RedirectOut path cmd) = do
-  setConfig (\config -> config { stdoutPath = Just path })
-  doInterpret cmd
-doInterpret (RedirectErr path cmd) = do
-  setConfig (\config -> config { stderrPath = Just path })
-  doInterpret cmd
+doInterpret (RedirectIn path cmd) = (setStdinPath path) >> (doInterpret cmd)
+doInterpret (RedirectOut path cmd) = (setStdoutPath path) >> (doInterpret cmd)
+doInterpret (RedirectErr path cmd) = (setStderrPath path) >> (doInterpret cmd)
 doInterpret _ = return [] -- TODO: more commands :P
 
 
