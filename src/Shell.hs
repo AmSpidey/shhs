@@ -12,6 +12,7 @@ import System.Console.Haskeline
 import Data.Colour.SRGB
 import Data.Word (Word8)
 import Data.List
+import Data.Text (Text)
 import qualified Data.Text.Read as TR
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -52,12 +53,18 @@ evalExpr _ = throwError "Undefined type of expression"
 getStream :: Maybe Path -> IOMode -> IO (StreamSpec s (), Maybe Handle)
 getStream Nothing _ = return (inherit, Nothing)
 getStream (Just path) mode = do
-  handle <- openFile path mode
-  return (useHandleClose handle, Just handle)
+  handle' <- openFile path mode
+  return (useHandleClose handle', Just handle')
 
 closeHandle :: Maybe Handle -> IO ()
 closeHandle Nothing = return ()
 closeHandle (Just h) = hClose h
+
+resolveLocalName :: String -> Shell String
+resolveLocalName name = do
+  path <- getPath
+  liftIO $ withCurrentDirectory path $ canonicalizePath name
+  
 
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
@@ -75,7 +82,11 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   Right (exitCode, _) -> return
     [AExit $ if exitCode == 0 then ExitSuccess else ExitFailure exitCode]
   Left str -> return [APrint $ "Error: wrong exit code: " ++ str]
-
+doInterpret (GenericCmd "run" args) = case args of
+  name:args' -> do
+    name' <- resolveLocalName $ T.unpack name
+    runProg name' args'
+  _ -> return [APrint "run: Nothing to execute."]
 doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
   >> return []
   where
@@ -84,47 +95,46 @@ doInterpret (AliasCmd alias val) =
   if alias == "let"
     then setErrCode (ExitFailure 1) >> return [APrint "Cannot alias with the name \"let\"."]
     else addAlias alias val >> return []
-doInterpret (GenericCmd name args) = do
-  path <- getPath
-  config <- getConfig
-  (stdinStream, stdinHandle) <- liftIO $ getStream (stdinPath config) ReadMode
-  (stdoutStream, stdoutHandle) <- liftIO $ getStream (stdoutPath config) WriteMode
-  (stderrStream, stderrHandle) <- liftIO $ getStream (stderrPath config) WriteMode
-  ec <- liftIO $ catch (withCurrentDirectory path $ runProcess $ setStderr stderrStream $ setStdout stdoutStream $ setStdin stdinStream (proc name $ map T.unpack args))
-    (\e -> do
-              let err = show (e :: IOException)
-              putStrLn ("Couldn't execute the command with exception: " ++ err)
-              return (ExitFailure 666)
-              )
-  liftIO $ closeHandle stdinHandle
-  liftIO $ closeHandle stdoutHandle
-  liftIO $ closeHandle stderrHandle
-  setConfig (\_ -> emptyConfig)
-  setErrCode ec
-  return []
+doInterpret (GenericCmd name args) = runProg name args
 doInterpret (Pipe src dst) = do
   (filename, h) <- liftIO $ openTempFile "." "tmp"
   liftIO $ hClose h
   setStdoutPath filename
   act <- doInterpret src
   setStdinPath filename
-  doInterpret dst
+  act' <- doInterpret dst
   liftIO $ removeFile filename
-  return act
-doInterpret (RedirectIn path cmd) = (setStdinPath path) >> (doInterpret cmd)
-doInterpret (RedirectOut path cmd) = (setStdoutPath path) >> (doInterpret cmd)
-doInterpret (RedirectErr path cmd) = (setStderrPath path) >> (doInterpret cmd)
+  return $ act ++ act'
+doInterpret (RedirectIn path cmd) = setStdinPath path >> doInterpret cmd
+doInterpret (RedirectOut path cmd) = setStdoutPath path >> doInterpret cmd
+doInterpret (RedirectErr path cmd) = setStderrPath path >> doInterpret cmd
 doInterpret _ = return [] -- TODO: more commands :P
 
+runProg :: String -> [Text] -> Shell [Action]
+runProg name args = do
+  path <- getPath
+  config <- getConfig
+  (stdinStream, stdinHandle) <- liftIO $ getStream (stdinPath config) ReadMode
+  (stdoutStream, stdoutHandle) <- liftIO $ getStream (stdoutPath config) WriteMode
+  (stderrStream, stderrHandle) <- liftIO $ getStream (stderrPath config) WriteMode
+  ec <- liftIO $ catch (withCurrentDirectory path $ runProcess $ setStderr stderrStream $ setStdout stdoutStream $ setStdin stdinStream (proc name $ map T.unpack args))
+    (\e -> putStrLn ("Couldn't execute the command with exception: " ++ show (e :: IOException))
+           >> return (ExitFailure 666))
+  liftIO $ closeHandle stdinHandle
+  liftIO $ closeHandle stdoutHandle
+  liftIO $ closeHandle stderrHandle
+  setConfig $ const emptyConfig
+  setErrCode ec
+  return []
 
 interpretCmd :: String -> Shell [Action]
-interpretCmd s = do
+interpretCmd s = doPreprocess s >>= parseCmd >>= doInterpret
 --  liftIO $ putStrLn s
-  s' <- doPreprocess s
+--  s' <- doPreprocess s
 --  liftIO $ putStrLn s'
-  cmd <- parseCmd s'
+--  cmd <- parseCmd s'
 --  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
-  doInterpret cmd
+--  doInterpret cmd
 
 handleEvent :: EventResult -> Shell [Action]
 handleEvent Nothing = return [AExit ExitSuccess]
