@@ -109,10 +109,7 @@ executeArgs :: [Text] -> Shell [Action]
 executeArgs args = case args of
   name:args' -> do
     name' <- resolveLocalName $ T.unpack name
-    mbHandle <- liftIO $ tryOpenFile name'
-    case mbHandle of
-      Nothing -> return []
-      Just fHandle -> do
+    catch (UnliftIO.withFile name' ReadMode (\fHandle -> do
         fContents <- liftIO $ hGetContents fHandle
         case fContents of
           '#':'!':_ -> liftIO (hClose fHandle) >> runProg name' args'
@@ -120,13 +117,13 @@ executeArgs args = case args of
             actionsList <- mapM interpretCmd $ joinByBackslash $ lines fContents
             liftIO $ hClose fHandle
             return $ concat actionsList
+      )) (\e -> liftIO $ printOpenErr e >> return [])
   _ -> return [APrint "run: Nothing to execute."]
 
   where
-  tryOpenFile :: String -> IO (Maybe Handle)
-  tryOpenFile name = catchIO
-    (Just <$> openFile name ReadMode)
-    (\e -> putStrLn ("Could not open file with exception: " ++ show e) >> return Nothing)
+  printOpenErr :: IOException -> IO ()
+  printOpenErr e = putStrLn $ "Could not open file with exception: " ++ show e
+
 
 runProg :: String -> [Text] -> Shell [Action]
 runProg name args = do
@@ -144,7 +141,7 @@ runProg name args = do
   setConfig $ const emptyConfig
   setErrCode ec
   return []
-  
+
 interpretCmd :: String -> Shell [Action]
 interpretCmd s = doPreprocess s >>= parseCmd >>= doInterpret
   -- liftIO $ putStrLn $ "Original command: " ++ s
