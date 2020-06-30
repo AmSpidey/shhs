@@ -1,6 +1,7 @@
 
 module Utils where
 
+import           Control.Exception              ( catch )
 -- | The following 4 functions are adapted from the `extra` package.
 
 -- | Like 'when', but where the test can be monadic.
@@ -22,3 +23,21 @@ notM = fmap not
 -- like && but combining predicates.
 (.&&) :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
 f .&& g = \a -> f a && g a
+
+-- taken from Data.List.Extra
+unsnoc :: [a] -> Maybe ([a], a)
+unsnoc [] = Nothing
+unsnoc [x] = Just ([], x)
+unsnoc (x:xs) = Just (x:a, b)
+    where Just (a,b) = unsnoc xs
+
+joinByBackslash :: [String] -> [String]
+joinByBackslash [] = []
+joinByBackslash (line:lines) =
+    let res = joinByBackslash lines in -- TODO make it tail recursive
+        case unsnoc line of
+            Nothing -> res
+            Just (l, '\\') -> case res of
+                [] -> [l]
+                l':ls' -> (l ++ l'):ls'
+            _ -> line:res
