@@ -128,9 +128,9 @@ runProg name args = do
 
 interpretCmd :: String -> Shell [Action]
 interpretCmd s = doPreprocess s >>= parseCmd >>= doInterpret
-  -- liftIO $ putStrLn $ "Original command: " ++ s
+  -- liftIO $ putStrLn $ "Original command: \"" ++ s ++ "\""
   -- s' <- doPreprocess s
-  -- liftIO $ putStrLn $ "After preprocess: " ++ s'
+  -- liftIO $ putStrLn $ "After preprocess: \"" ++ s' ++ "\""
   -- cmd <- parseCmd s'
   -- liftIO $ putStrLn $ "Parsed command to " ++ show cmd ++ ", interpreting..."
   -- doInterpret cmd
