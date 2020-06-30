@@ -22,13 +22,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 
 import UnliftIO
-<<<<<<< HEAD
 import UnliftIO.Directory
-||||||| parent of ef612a6... Add dotfile support
-=======
-import UnliftIO.Directory
-import UnliftIO.Exception
->>>>>>> ef612a6... Add dotfile support
 
 import Abs
 import Builtins
@@ -133,7 +127,6 @@ executeArgs args = case args of
             return $ concat actionsList
       )) printOpenErr
   _ -> printFail "run: Nothing to execute."
-
 
 printOpenErr :: IOException -> Shell [Action]
 printOpenErr e = printFail $ "Could not open file with exception: " ++ show e
