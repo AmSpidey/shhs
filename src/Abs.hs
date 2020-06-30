@@ -30,7 +30,7 @@ data Expr
 
 data Val = VStr Text | VInt Integer
 instance Show Val where
-  show (VStr t) = show t
+  show (VStr t) = T.unpack t
   show (VInt i) = show i
 
 type Path = String -- TODO: this should be an actual type
@@ -75,10 +75,10 @@ instance Show Command where
   show (GenericCmd name args) = "cmd{" ++ name ++ "}(" ++ intercalate ", " (map T.unpack args) ++ ")"
   show (DeclCmd str e) = "let " ++ str ++ " = " ++ show e
   show (AliasCmd a v) = "let alias " ++ a ++ " = " ++ v
-  show (Pipe src dst) = "(" ++ show src ++ ") | (" ++ (show dst) ++ ")"
-  show (RedirectOut path cmd) = show cmd ++ " > " ++ (show path)
-  show (RedirectErr path cmd) = show cmd ++ " 2> " ++ (show path)
-  show (RedirectIn path cmd) = show cmd ++ " < " ++ (show path)
+  show (Pipe src dst) = "(" ++ show src ++ ") | (" ++ show dst ++ ")"
+  show (RedirectOut path cmd) = show cmd ++ " > " ++ show path
+  show (RedirectErr path cmd) = show cmd ++ " 2> " ++ show path
+  show (RedirectIn path cmd) = show cmd ++ " < " ++ show path
   show _ = error "cannot show :("
 
 -- | Command type building blocks.
@@ -96,6 +96,10 @@ data ParseGuide a where
 
 -- Parser types
 
-type Parser = ParsecT Void Text Shell
+type HshParsec s = ParsecT Void s Shell
+
+type Parser = HshParsec Text
+
+type ParserS = HshParsec String
 
 type Err = String

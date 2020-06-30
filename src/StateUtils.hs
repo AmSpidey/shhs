@@ -13,12 +13,11 @@ import UnliftIO
 
 import Abs
 
--- TODO: make all functions use this synonym
+-- TODO: make all functions use this synonym - otherwise they can't be used in parser
 
 type ShM m = (MonadReader (IORef ShellState) m, MonadIO m)
 
 
--- TODO: those [g|s]etters are similar, merge them somehow? Probably would require TemplateHaskell tho...
 setVar :: String -> Val -> Shell ()
 setVar name val = do
   stRef <- ask

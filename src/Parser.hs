@@ -16,12 +16,13 @@ import Abs
 import Utils
 import StateUtils
 
+
 -- | Type used for parsing command arguments
 
 data Arg = Generic Text | Redirect (Text, Path)
 
 -- | Preprocessing part.
-
+{-
 doPreprocess :: String -> Shell String
 doPreprocess t = do
   ecpeb <- runParserT (linePreprocessor 0) "preprocessing" $ T.pack t
@@ -51,7 +52,52 @@ preprocessVar = do
     return $ show $ fromMaybe (VStr "") val
 
 pCharAndEscape :: Parser Char
-pCharAndEscape = try (char '\\') <|> L.charLiteral
+pCharAndEscape = try (char '\\') <|> L.charLiteral   return $ show $ fromMaybe (VStr "") val
+-}
+
+--this is my best attempt at a bitmap one could pattern match into
+
+data EscapeState = ENormal | EEscaped
+data SpaceState = ENoSpace | EAfterSpace
+
+type EscapingState = (EscapeState, SpaceState)
+
+normSt :: EscapingState
+normSt = (ENormal, ENoSpace)
+
+getVarStr :: String -> Shell String
+getVarStr name = do
+  val <- getVar name
+  return $ show $ fromMaybe (VStr "") val
+
+unescaper :: String -> Shell String
+unescaper = go normSt
+  where
+    go :: EscapingState -> String -> Shell String
+    go _ [] = return []
+    go (ENormal, e) ('\\':rest) = go (EEscaped, e)  rest
+    go (ENormal, _) ('$':rest) = do
+      ecpeb <- runParserT pVarNameAndRest "preprocessing" rest -- TODO: this makes preprocessing O(n^2)
+      case ecpeb of
+        Left peb -> do liftIO $ putStrLn $ "Getting variable name failed!\n" ++ errorBundlePretty peb
+                       ('$':) <$> go normSt rest
+        Right (name, rest') -> do
+          val <- getVarStr name
+          (val ++) <$> go normSt rest'
+    go (EEscaped, _) (' ':rest) = (' ':) <$> go normSt rest
+    go (ENormal, _) (' ':rest) = (' ':) <$> go (ENormal, EAfterSpace) rest
+    go (ENormal, EAfterSpace) ('~':rest) = do
+      home <- getVarStr "HOME"
+      (home ++) <$> go normSt rest
+    go _ (c:rest) = (c:) <$> go normSt rest
+
+doPreprocess :: String -> Shell String
+doPreprocess = unescaper
+
+
+pVarNameAndRest :: ParserS (String, String)
+pVarNameAndRest = (,) <$> pNameS <*> takeWhileP Nothing (const True)
+
 
 -- | Parsing expressions.
 
@@ -104,11 +150,19 @@ doParseLine t = do
   ecpeb <- runParserT commandParser "input command" t
   either (\peb -> DoNothing <$ liftIO (putStrLn $ errorBundlePretty peb)) return ecpeb
 
+-- TODO: maybe one can make those for generic Char streams?
+
 sc :: Parser ()
 sc = L.space space1 (L.skipLineComment "#") empty
 
+scS :: ParserS ()
+scS = L.space space1 (L.skipLineComment "#") empty
+
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
+
+lexemeS :: ParserS a -> ParserS a
+lexemeS = L.lexeme scS
 
 symbol :: Text -> Parser Text
 symbol = L.symbol sc
@@ -124,6 +178,9 @@ pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
 
 pName :: Parser String
 pName = lexeme ((:) <$> letterChar <*> many alphaNumChar <?> "command name")
+
+pNameS :: ParserS String
+pNameS = lexemeS ((:) <$> letterChar <*> many alphaNumChar <?> "command name")
 
 notSpaceOrPipe :: Parser Text
 notSpaceOrPipe = lexeme $ takeWhile1P Nothing $ (not . isSpace) .&& (/= '|')

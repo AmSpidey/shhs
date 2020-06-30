@@ -64,7 +64,6 @@ resolveLocalName :: String -> Shell String
 resolveLocalName name = do
   path <- getPath
   liftIO $ withCurrentDirectory path $ canonicalizePath name
-  
 
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
@@ -129,12 +128,12 @@ runProg name args = do
 
 interpretCmd :: String -> Shell [Action]
 interpretCmd s = doPreprocess s >>= parseCmd >>= doInterpret
---  liftIO $ putStrLn s
---  s' <- doPreprocess s
---  liftIO $ putStrLn s'
---  cmd <- parseCmd s'
---  liftIO $ putStrLn $ "Interpreting command " ++ show cmd ++ "..."
---  doInterpret cmd
+  -- liftIO $ putStrLn $ "Original command: " ++ s
+  -- s' <- doPreprocess s
+  -- liftIO $ putStrLn $ "After preprocess: " ++ s'
+  -- cmd <- parseCmd s'
+  -- liftIO $ putStrLn $ "Parsed command to " ++ show cmd ++ ", interpreting..."
+  -- doInterpret cmd
 
 handleEvent :: EventResult -> Shell [Action]
 handleEvent Nothing = return [AExit ExitSuccess]
@@ -183,11 +182,17 @@ runShell st m = do
   stRef <- newIORef st
   runInputT defaultSettings (runReaderT m stRef)
 
+initEnv :: Env -> IO Env
+initEnv env = do
+  home <- VStr . T.pack <$> getHomeDirectory
+  return $ Map.insert "HOME" home env
+
+
 initState :: IO ShellState
 initState = do
-  env <- getEnvironment
-  ShellState
-    (Map.map VStr (T.pack <$> Map.fromList env))
+  env <- Map.map (VStr . T.pack) . Map.fromList <$> getEnvironment
+  env' <- initEnv env
+  ShellState env'
     <$> getCurrentDirectory
     <*> pure ExitSuccess
     <*> pure Map.empty
