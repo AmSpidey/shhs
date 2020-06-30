@@ -199,7 +199,7 @@ integer :: Parser Integer
 integer = lexeme L.decimal
 
 stringLiteral :: Parser Text
-stringLiteral = T.pack <$> (char '\"' *> manyTill L.charLiteral (char '\"'))
+stringLiteral = lexeme $ T.pack <$> (char '\"' *> manyTill L.charLiteral (char '\"'))
 
 pKeyword :: Text -> Parser Text
 pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
@@ -221,8 +221,8 @@ genericArg = Generic <$> genericArgument
 
 redirectArg :: Parser Arg
 redirectArg = do
-  opName <- try $ choice $ symbol <$> [ "<", ">", "2>" ]
-  path <- T.unpack <$> notSpaceOrPipe
+  opName <- choice $ symbol <$> [ "<", ">", "2>" ]
+  path <- T.unpack <$> genericArgument
   return $ Redirect (opName, path)
 
 distributeArgs :: [Arg] -> ([Text], [(Text, Path)])
