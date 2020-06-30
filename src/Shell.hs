@@ -15,7 +15,6 @@ import Data.List
 import Data.Text (Text)
 import qualified Data.Text.Read as TR
 import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
 import qualified Data.Map as Map
 import Data.Map ((!?))
 
@@ -24,7 +23,6 @@ import Control.Monad.Reader
 
 import UnliftIO
 import UnliftIO.Directory
-import UnliftIO.Exception
 
 import Abs
 import Builtins
@@ -82,7 +80,7 @@ doInterpret (GenericCmd "pwd" _) = pure . APrint <$> getPath
 doInterpret (GenericCmd "cd" (dir:_)) = do
   path <- getPath
   absPath <- withCurrentDirectory path $ canonicalizePath $ T.unpack dir
-  ifM (liftIO $ doesDirectoryExist absPath)
+  ifM (doesDirectoryExist absPath)
     (setPath absPath >> return [])
     (printFail $ "Error: no such directory: " ++ T.unpack dir)
 doInterpret (GenericCmd "exit" []) = return [AExit ExitSuccess]
