@@ -81,11 +81,7 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   Right (exitCode, _) -> return
     [AExit $ if exitCode == 0 then ExitSuccess else ExitFailure exitCode]
   Left str -> return [APrint $ "Error: wrong exit code: " ++ str]
-doInterpret (GenericCmd "run" args) = case args of
-  name:args' -> do
-    name' <- resolveLocalName $ T.unpack name
-    runProg name' args'
-  _ -> return [APrint "run: Nothing to execute."]
+doInterpret (GenericCmd "run" args) = executeArgs args
 doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
   >> return []
   where
@@ -109,6 +105,26 @@ doInterpret (RedirectOut path cmd) = setStdoutPath path >> doInterpret cmd
 doInterpret (RedirectErr path cmd) = setStderrPath path >> doInterpret cmd
 doInterpret _ = return [] -- TODO: more commands :P
 
+executeArgs :: [Text] -> Shell [Action]
+executeArgs args = case args of
+  name:args' -> do
+    name' <- resolveLocalName $ T.unpack name
+    catch (UnliftIO.withFile name' ReadMode (\fHandle -> do
+        fContents <- liftIO $ hGetContents fHandle
+        case fContents of
+          '#':'!':_ -> liftIO (hClose fHandle) >> runProg name' args'
+          _ -> do
+            actionsList <- mapM interpretCmd $ joinByBackslash $ lines fContents
+            liftIO $ hClose fHandle
+            return $ concat actionsList
+      )) (\e -> liftIO $ printOpenErr e >> return [])
+  _ -> return [APrint "run: Nothing to execute."]
+
+  where
+  printOpenErr :: IOException -> IO ()
+  printOpenErr e = putStrLn $ "Could not open file with exception: " ++ show e
+
+
 runProg :: String -> [Text] -> Shell [Action]
 runProg name args = do
   path <- getPath
@@ -116,9 +132,9 @@ runProg name args = do
   (stdinStream, stdinHandle) <- liftIO $ getStream (stdinPath config) ReadMode
   (stdoutStream, stdoutHandle) <- liftIO $ getStream (stdoutPath config) WriteMode
   (stderrStream, stderrHandle) <- liftIO $ getStream (stderrPath config) WriteMode
-  ec <- liftIO $ catch (withCurrentDirectory path $ runProcess $ setStderr stderrStream $ setStdout stdoutStream $ setStdin stdinStream (proc name $ map T.unpack args))
-    (\e -> putStrLn ("Couldn't execute the command with exception: " ++ show (e :: IOException))
-           >> return (ExitFailure 666))
+  ec <- liftIO $
+    catch (withCurrentDirectory path $ runProcess $ setStderr stderrStream $ setStdout stdoutStream $ setStdin stdinStream (proc name $ map T.unpack args))
+    (\e -> putStrLn ("Couldn't execute the command with exception: " ++ show (e :: IOException)) >> return (ExitFailure 666))
   liftIO $ closeHandle stdinHandle
   liftIO $ closeHandle stdoutHandle
   liftIO $ closeHandle stderrHandle
