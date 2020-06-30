@@ -198,8 +198,18 @@ symbol = L.symbol sc
 integer :: Parser Integer
 integer = lexeme L.decimal
 
+debPrInput :: Parser ()
+debPrInput = do
+  inp <- getInput
+  liftIO $ putStrLn $ "remaining input: " ++ T.unpack inp
+
+quote :: Parser Char
+quote = char '\"' <|> char '\''
+
 stringLiteral :: Parser Text
-stringLiteral = lexeme $ T.pack <$> (char '\"' *> manyTill L.charLiteral (char '\"'))
+stringLiteral = lexeme $ quote *> takeWhileP Nothing (/= '\"') <* quote
+
+--manyTill (liftIO (putStrLn "charxd") >> debPrInput >> L.charLiteral <* debPrInput) (char '\"'))
 
 pKeyword :: Text -> Parser Text
 pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
