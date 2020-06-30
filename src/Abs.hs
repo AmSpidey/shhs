@@ -56,7 +56,7 @@ type EventResult = Maybe String
 
 type EventList = [Async EventResult]
 
-data Action = APrint String | AExit ExitCode
+data Action = APrint String | APrintErr String | AExit ExitCode
   deriving (Show, Eq)
 
 data Command

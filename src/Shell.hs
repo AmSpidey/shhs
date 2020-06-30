@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 module Shell where
 
 import System.IO hiding (hClose)
@@ -9,7 +10,7 @@ import System.Process.Typed
 import System.Console.ANSI.Codes
 import System.Console.Haskeline
 
-import Data.Colour.SRGB
+import Data.Colour.SRGB hiding (RGB)
 import Data.Word (Word8)
 import Data.List
 import Data.Text (Text)
@@ -17,12 +18,14 @@ import qualified Data.Text.Read as TR
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Map as Map
+import Data.Map ((!?))
 
 import Control.Monad.Except
 import Control.Monad.Reader
 import UnliftIO
 
 import Abs
+import Builtins
 import Parser
 import Utils
 import StateUtils
@@ -65,6 +68,11 @@ resolveLocalName name = do
   path <- getPath
   liftIO $ withCurrentDirectory path $ canonicalizePath name
 
+printFail :: String -> Shell [Action]
+printFail msg = do
+  setErrCode (ExitFailure 1)
+  return [APrintErr msg]
+
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
 -- For now the actions are left in just in case we want to do something in another place.
@@ -73,14 +81,13 @@ doInterpret (GenericCmd "cd" (dir:_)) = do
   path <- getPath
   absPath <- liftIO $ withCurrentDirectory path $ canonicalizePath $ T.unpack dir
   ifM (liftIO $ doesDirectoryExist absPath)
-    (setPath absPath)
-    (liftIO $ TIO.putStrLn $ "Error: no such directory: " `T.append` dir)
-  return []
+    ((setPath absPath) >> return [])
+    (printFail $ "Error: no such directory: " ++ T.unpack dir)
 doInterpret (GenericCmd "exit" []) = return [AExit ExitSuccess]
 doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   Right (exitCode, _) -> return
     [AExit $ if exitCode == 0 then ExitSuccess else ExitFailure exitCode]
-  Left str -> return [APrint $ "Error: wrong exit code: " ++ str]
+  Left str -> printFail $ "Error: wrong exit code: " ++ str
 doInterpret (GenericCmd "run" args) = executeArgs args
 doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
   >> return []
@@ -88,7 +95,7 @@ doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (
   exprError = "Used wrong expression to declare a variable."
 doInterpret (AliasCmd alias val) =
   if alias == "let"
-    then setErrCode (ExitFailure 1) >> return [APrint "Cannot alias with the name \"let\"."]
+    then printFail "Cannot alias with the name \"let\"."
     else addAlias alias val >> return []
 doInterpret (GenericCmd name args) = runProg name args
 doInterpret (Pipe src dst) = do
@@ -117,12 +124,12 @@ executeArgs args = case args of
             actionsList <- mapM interpretCmd $ joinByBackslash $ lines fContents
             liftIO $ hClose fHandle
             return $ concat actionsList
-      )) (\e -> liftIO $ printOpenErr e >> return [])
-  _ -> return [APrint "run: Nothing to execute."]
+      )) printOpenErr
+  _ -> printFail "run: Nothing to execute."
 
   where
-  printOpenErr :: IOException -> IO ()
-  printOpenErr e = putStrLn $ "Could not open file with exception: " ++ show e
+  printOpenErr :: IOException -> Shell [Action]
+  printOpenErr e = printFail $ "Could not open file with exception: " ++ show e
 
 
 runProg :: String -> [Text] -> Shell [Action]
@@ -156,12 +163,20 @@ handleEvent Nothing = return [AExit ExitSuccess]
 handleEvent (Just s) = interpretCmd s
 
 
-execAction :: MonadIO m => Action -> m ()
-execAction = liftIO . go
+execAction :: Action -> Shell ()
+execAction (APrint s) = liftIO $ putStrLn s
+execAction (APrintErr s) =
+  getErrColor >>= \case
+    Nothing -> liftIO $ hPutStrLn stderr s
+    Just (r, g, b) -> liftIO $ hPutStrLn stderr (withColor r g b s)
+
   where
-    go :: Action -> IO ()
-    go (APrint s) = putStrLn s
-    go (AExit code) = exitWith code
+    getErrColor :: Shell (Maybe RGB)
+    getErrColor = getVar errColorKey >>= \case
+      Just (VStr txt) -> return $ builtinColors !? T.unpack txt
+      _ -> return Nothing
+
+execAction (AExit code) = liftIO $ exitWith code
 
 eventsManager :: EventList -> Shell ()
 eventsManager [] = return ()
@@ -173,6 +188,9 @@ eventsManager events = do
 
 rgb :: Word8 -> Word8 -> Word8 -> String
 rgb r g b = setSGRCode [SetRGBColor Foreground (sRGB24 r g b)]
+
+withColor :: Word8 -> Word8 -> Word8 -> String -> String
+withColor r g b s = rgb r g b ++ s ++ setSGRCode [SetDefaultColor Foreground]
 
 prompt :: Path -> String
 prompt path =
