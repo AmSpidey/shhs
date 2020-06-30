@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, GADTs #-}
+{-# LANGUAGE OverloadedStrings, GADTs, RecordWildCards #-}
 module Parser (parseCmd, doPreprocess) where
 
 import Control.Monad
@@ -16,12 +16,13 @@ import Abs
 import Utils
 import StateUtils
 
+
 -- | Type used for parsing command arguments
 
 data Arg = Generic Text | Redirect (Text, Path)
 
 -- | Preprocessing part.
-
+{-
 doPreprocess :: String -> Shell String
 doPreprocess t = do
   ecpeb <- runParserT (linePreprocessor 0) "preprocessing" $ T.pack t
@@ -51,7 +52,80 @@ preprocessVar = do
     return $ show $ fromMaybe (VStr "") val
 
 pCharAndEscape :: Parser Char
-pCharAndEscape = try (char '\\') <|> L.charLiteral
+pCharAndEscape = try (char '\\') <|> L.charLiteral   return $ show $ fromMaybe (VStr "") val
+-}
+
+--this is my best attempt at a bitmap one could pattern match into
+
+data EscapeState = ENormal | EEscaped
+data SpaceState = ENoSpace | EAfterSpace
+data StrState = ENoStr | EString
+
+data EscapingState = EState
+  { escSt :: EscapeState
+  , spSt :: SpaceState
+  , strSt :: StrState
+  }
+
+class Defaultable d where
+  def :: d
+
+instance Defaultable EscapeState where
+  def = ENormal
+
+instance Defaultable SpaceState where
+  def = ENoSpace
+
+instance Defaultable StrState where
+  def = ENoStr
+
+instance Defaultable EscapingState where
+  def = EState def def def
+
+class Flippable f where
+  flup :: f -> f
+
+instance Flippable StrState where
+  flup ENoStr = EString
+  flup EString = ENoStr
+
+getVarStr :: String -> Shell String
+getVarStr name = do
+  val <- getVar name
+  return $ show $ fromMaybe (VStr "") val
+
+unescaper :: String -> Shell String
+unescaper = go def
+  where
+    go :: EscapingState -> String -> Shell String
+    go _ [] = return []
+    go e@EState{escSt = ENormal} ('\\':rest) = go e{escSt = EEscaped} rest
+    go e@EState{escSt = ENormal} ('$':rest) = do
+      let rep = def{strSt = strSt e}
+      ecpeb <- runParserT pVarNameAndRest "preprocessing" rest -- TODO: this makes preprocessing O(n^2)
+      case ecpeb of
+        Left peb -> --do liftIO $ putStrLn $ "Getting variable name failed!\n" ++ errorBundlePretty peb
+                       ('$':) <$> go rep rest
+        Right (name, rest') -> do
+          val <- getVarStr name
+          (val ++) <$> go rep rest'
+    go e@EState{escSt = EEscaped, strSt = ENoStr} (' ':rest) = ('\\':) . (' ':) <$> go e{escSt = def} rest
+    go e@EState{escSt = ENormal} (' ':rest) = (' ':) <$> go e{spSt = EAfterSpace} rest
+    go EState{escSt = ENormal, spSt = EAfterSpace, strSt = ENoStr} ('~':rest) = do
+      home <- getVarStr "HOME"
+      (home ++) <$> go def rest
+    go e@EState{escSt = EEscaped} (c:rest) = ('\\':) . (c:) <$> go e{escSt = def} rest
+    go e ('\"':rest) = ('\"':) <$> go e{strSt = flup $ strSt e} rest
+    go e ('\'':rest) = ('\'':) <$> go e{strSt = flup $ strSt e} rest
+    go e (c:rest) = (c:) <$> go def{strSt = strSt e} rest
+
+doPreprocess :: String -> Shell String
+doPreprocess = unescaper
+
+
+pVarNameAndRest :: ParserS (String, String)
+pVarNameAndRest = (,) <$> pNameS <*> takeWhileP Nothing (const True)
+
 
 -- | Parsing expressions.
 
@@ -104,11 +178,19 @@ doParseLine t = do
   ecpeb <- runParserT commandParser "input command" t
   either (\peb -> DoNothing <$ liftIO (putStrLn $ errorBundlePretty peb)) return ecpeb
 
+-- TODO: maybe one can make those for generic Char streams?
+
 sc :: Parser ()
 sc = L.space space1 (L.skipLineComment "#") empty
 
+scS :: ParserS ()
+scS = L.space space1 (L.skipLineComment "#") empty
+
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
+
+lexemeS :: ParserS a -> ParserS a
+lexemeS = L.lexeme scS
 
 symbol :: Text -> Parser Text
 symbol = L.symbol sc
@@ -124,6 +206,9 @@ pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
 
 pName :: Parser String
 pName = lexeme ((:) <$> letterChar <*> many alphaNumChar <?> "command name")
+
+pNameS :: ParserS String
+pNameS = lexemeS ((:) <$> letterChar <*> many alphaNumChar <?> "command name")
 
 notSpaceOrPipe :: Parser Text
 notSpaceOrPipe = lexeme $ takeWhile1P Nothing $ (not . isSpace) .&& (/= '|')
@@ -157,7 +242,7 @@ constructCommand name (("2>", path):t) args = RedirectErr path $ constructComman
 
 
 commandParser :: Parser Command
-commandParser = noCommand <|> pCommandList
+commandParser = sc >> noCommand <|> pCommandList
 
 noCommand :: Parser Command
 noCommand = DoNothing <$ eof

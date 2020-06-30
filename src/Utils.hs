@@ -21,4 +21,4 @@ notM = fmap not
 
 -- like && but combining predicates.
 (.&&) :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
-(.&&) f g a = (f a) && (g a)
+f .&& g = \a -> f a && g a
