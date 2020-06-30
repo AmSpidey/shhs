@@ -209,8 +209,6 @@ quote = char '\"' <|> char '\''
 stringLiteral :: Parser Text
 stringLiteral = lexeme $ quote *> takeWhileP Nothing (/= '\"') <* quote
 
---manyTill (liftIO (putStrLn "charxd") >> debPrInput >> L.charLiteral <* debPrInput) (char '\"'))
-
 pKeyword :: Text -> Parser Text
 pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
 

@@ -45,6 +45,9 @@ setErrCode :: ExitCode -> Shell ()
 setErrCode i = do
   stRef <- ask
   modifyIORef stRef $ \st -> st {shellLastErrCode = i}
+  setVar "EXITCODE" $ VInt $ case i of
+                             ExitSuccess -> 0
+                             ExitFailure err -> toInteger err
 
 addAlias :: String -> String -> Shell ()
 addAlias a v = do
