@@ -214,7 +214,7 @@ constructCommand name (("2>", path):t) args = RedirectErr path $ constructComman
 
 
 commandParser :: Parser Command
-commandParser = noCommand <|> pCommandList
+commandParser = sc >> noCommand <|> pCommandList
 
 noCommand :: Parser Command
 noCommand = DoNothing <$ eof
