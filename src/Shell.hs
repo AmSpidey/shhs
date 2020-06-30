@@ -82,10 +82,10 @@ doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
     [AExit $ if exitCode == 0 then ExitSuccess else ExitFailure exitCode]
   Left str -> return [APrint $ "Error: wrong exit code: " ++ str]
 doInterpret (GenericCmd "run" args) = executeArgs args
-doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
-  >> return []
-  where
-  exprError = "Used wrong expression to declare a variable."
+doInterpret (DeclCmd var expr) = if var == "EXITCODE" then return [APrint "Cannot assign to this variable."] else do
+  case runExcept $ evalExpr expr of
+    Left msg -> return [APrint msg]
+    Right val -> setVar var val >> return []
 doInterpret (AliasCmd alias val) =
   if alias == "let"
     then setErrCode (ExitFailure 1) >> return [APrint "Cannot alias with the name \"let\"."]
