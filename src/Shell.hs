@@ -2,8 +2,12 @@
 {-# LANGUAGE LambdaCase #-}
 module Shell where
 
+<<<<<<< HEAD
 import System.IO hiding (hClose, withFile)
 import System.Exit
+=======
+import System.IO hiding (hClose)
+>>>>>>> added ctrl-c support
 import System.Environment
 import System.Process.Typed
 import System.Console.ANSI.Codes
@@ -20,15 +24,23 @@ import Data.Map ((!?))
 
 import Control.Monad.Except
 import Control.Monad.Reader
+<<<<<<< HEAD
 
 import UnliftIO
 import UnliftIO.Directory
+=======
+import UnliftIO hiding (Handler)
+>>>>>>> added ctrl-c support
 
 import Abs
 import Builtins
 import Parser
 import Utils
 import StateUtils
+
+import System.Exit
+import System.Posix.Signals
+import Control.Concurrent
 
 -- Expressions evaluation
 
@@ -236,9 +248,12 @@ initState = do
     <*> pure Map.empty
     <*> pure emptyConfig
 
+ignoreSIGINT :: IO Handler
+ignoreSIGINT = installHandler keyboardSignal (Catch (return ())) Nothing
 
 hshMain :: IO ()
 hshMain = do
+  ignoreSIGINT
   args <- getArgs
   env <- initState
   case args of
