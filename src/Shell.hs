@@ -1,10 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Shell where
 
-import System.IO hiding (hClose)
+import System.IO hiding (hClose, withFile)
 import System.Exit
 import System.Environment
-import System.Directory
 import System.Process.Typed
 import System.Console.ANSI.Codes
 import System.Console.Haskeline
@@ -20,7 +19,10 @@ import qualified Data.Map as Map
 
 import Control.Monad.Except
 import Control.Monad.Reader
+
 import UnliftIO
+import UnliftIO.Directory
+import UnliftIO.Exception
 
 import Abs
 import Parser
@@ -63,7 +65,7 @@ closeHandle (Just h) = hClose h
 resolveLocalName :: String -> Shell String
 resolveLocalName name = do
   path <- getPath
-  liftIO $ withCurrentDirectory path $ canonicalizePath name
+  withCurrentDirectory path $ canonicalizePath name
 
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
@@ -71,8 +73,8 @@ doInterpret :: Command -> Shell [Action]
 doInterpret (GenericCmd "pwd" _) = pure . APrint <$> getPath
 doInterpret (GenericCmd "cd" (dir:_)) = do
   path <- getPath
-  absPath <- liftIO $ withCurrentDirectory path $ canonicalizePath $ T.unpack dir
-  ifM (liftIO $ doesDirectoryExist absPath)
+  absPath <- withCurrentDirectory path $ canonicalizePath $ T.unpack dir
+  ifM (doesDirectoryExist absPath)
     (setPath absPath)
     (liftIO $ TIO.putStrLn $ "Error: no such directory: " `T.append` dir)
   return []
@@ -93,12 +95,12 @@ doInterpret (AliasCmd alias val) =
 doInterpret (GenericCmd name args) = runProg name args
 doInterpret (Pipe src dst) = do
   (filename, h) <- liftIO $ openTempFile "." "tmp"
-  liftIO $ hClose h
+  hClose h
   setStdoutPath filename
   act <- doInterpret src
   setStdinPath filename
   act' <- doInterpret dst
-  liftIO $ removeFile filename
+  removeFile filename
   return $ act ++ act'
 doInterpret (RedirectIn path cmd) = setStdinPath path >> doInterpret cmd
 doInterpret (RedirectOut path cmd) = setStdoutPath path >> doInterpret cmd
@@ -109,20 +111,20 @@ executeArgs :: [Text] -> Shell [Action]
 executeArgs args = case args of
   name:args' -> do
     name' <- resolveLocalName $ T.unpack name
-    catch (UnliftIO.withFile name' ReadMode (\fHandle -> do
+    catch (withFile name' ReadMode (\fHandle -> do
         fContents <- liftIO $ hGetContents fHandle
         case fContents of
-          '#':'!':_ -> liftIO (hClose fHandle) >> runProg name' args'
+          '#':'!':_ -> hClose fHandle >> runProg name' args'
           _ -> do
             actionsList <- mapM interpretCmd $ joinByBackslash $ lines fContents
-            liftIO $ hClose fHandle
+            hClose fHandle
             return $ concat actionsList
       )) (\e -> liftIO $ printOpenErr e >> return [])
   _ -> return [APrint "run: Nothing to execute."]
 
-  where
-  printOpenErr :: IOException -> IO ()
-  printOpenErr e = putStrLn $ "Could not open file with exception: " ++ show e
+
+printOpenErr :: IOException -> IO ()
+printOpenErr e = putStrLn $ "Could not open file with exception: " ++ show e
 
 
 runProg :: String -> [Text] -> Shell [Action]
@@ -178,8 +180,14 @@ prompt :: Path -> String
 prompt path =
   rgb 72 52 101 ++ "λ " ++ rgb 102 73 142 ++ path ++ rgb 155 62 144 ++ " >>= " ++ setSGRCode [SetDefaultColor Foreground]
 
+runDotFile :: Shell ()
+runDotFile = do
+  home <- getVarStr "HOME"
+  whenM (doesFileExist $ home ++ "/.hshrc") $ void $ interpretCmd "run ~/.hshrc"
+
+
 startShell :: IO ()
-startShell = defaultRunShell loop
+startShell = defaultRunShell $ runDotFile >> loop
   where
     loop :: Shell ()
     loop = do
