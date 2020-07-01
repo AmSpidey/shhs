@@ -22,7 +22,13 @@ import Control.Monad.Except
 import Control.Monad.Reader
 
 import UnliftIO
+<<<<<<< HEAD
 import UnliftIO.Directory
+||||||| parent of ef612a6... Add dotfile support
+=======
+import UnliftIO.Directory
+import UnliftIO.Exception
+>>>>>>> ef612a6... Add dotfile support
 
 import Abs
 import Builtins
@@ -83,6 +89,7 @@ doInterpret (GenericCmd "cd" (dir:_)) = do
   ifM (doesDirectoryExist absPath)
     (setPath absPath >> return [])
     (printFail $ "Error: no such directory: " ++ T.unpack dir)
+
 doInterpret (GenericCmd "exit" []) = return [AExit ExitSuccess]
 doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   Right (exitCode, _) -> return
@@ -126,6 +133,7 @@ executeArgs args = case args of
             return $ concat actionsList
       )) printOpenErr
   _ -> printFail "run: Nothing to execute."
+
 
 printOpenErr :: IOException -> Shell [Action]
 printOpenErr e = printFail $ "Could not open file with exception: " ++ show e
