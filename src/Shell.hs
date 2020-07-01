@@ -127,11 +127,8 @@ executeArgs args = case args of
       )) printOpenErr
   _ -> printFail "run: Nothing to execute."
 
-
 printOpenErr :: IOException -> Shell [Action]
 printOpenErr e = printFail $ "Could not open file with exception: " ++ show e
-
-
 
 runProg :: String -> [Text] -> Shell [Action]
 runProg name args = do
