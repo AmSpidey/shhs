@@ -6,4 +6,4 @@ After cloning the repo, don't forget to run `git submodule update --remote --ini
 to download the submodule.
 
 ## Running the app with stack
-To run the desired exe you have to run `stack run hsh-exe` or stack will choose the haskeline example.
+To run the desired exe you have to run `stack run hsh` or stack will choose the haskeline example.

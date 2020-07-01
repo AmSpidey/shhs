@@ -39,7 +39,7 @@ library:
   source-dirs: src
 
 executables:
-  hsh-exe:
+  hsh:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
