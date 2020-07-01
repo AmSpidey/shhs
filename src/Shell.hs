@@ -245,10 +245,11 @@ ignoreSIGINT = installHandler keyboardSignal (Catch (return ())) Nothing
 
 hshMain :: IO ()
 hshMain = do
-  ignoreSIGINT
   args <- getArgs
   env <- initState
   case args of
-    "-c":rest -> runShell env $ interpretCmd (unwords rest) >>= mapM_ execAction
+    "-c":rest -> 
+      runShell env $ 
+        liftIO ignoreSIGINT >> interpretCmd (unwords rest) >>= mapM_ execAction
     _ -> startShell
 
