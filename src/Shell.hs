@@ -248,8 +248,6 @@ hshMain = do
   args <- getArgs
   env <- initState
   case args of
-    "-c":rest -> 
-      runShell env $ 
-        liftIO ignoreSIGINT >> interpretCmd (unwords rest) >>= mapM_ execAction
-    _ -> startShell
+    "-c":rest -> runShell env $ interpretCmd (unwords rest) >>= mapM_ execAction
+    _ -> ignoreSIGINT >> startShell
 
