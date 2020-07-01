@@ -172,8 +172,11 @@ debPrInput = do
 quote :: Parser Char
 quote = char '\"' <|> char '\''
 
+isNotQuote :: Char -> Bool
+isNotQuote = (/= '\"') .&& (/= '\'')
+
 stringLiteral :: Parser Text
-stringLiteral = lexeme $ quote *> takeWhileP Nothing (/= '\"') <* quote
+stringLiteral = lexeme $ quote *> takeWhileP Nothing isNotQuote <* quote
 
 pKeyword :: Text -> Parser Text
 pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
