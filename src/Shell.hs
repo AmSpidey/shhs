@@ -83,16 +83,17 @@ doInterpret (GenericCmd "cd" (dir:_)) = do
   ifM (doesDirectoryExist absPath)
     (setPath absPath >> return [])
     (printFail $ "Error: no such directory: " ++ T.unpack dir)
+
 doInterpret (GenericCmd "exit" []) = return [AExit ExitSuccess]
 doInterpret (GenericCmd "exit" (code:_)) = case TR.decimal code of
   Right (exitCode, _) -> return
     [AExit $ if exitCode == 0 then ExitSuccess else ExitFailure exitCode]
   Left str -> printFail $ "Error: wrong exit code: " ++ str
 doInterpret (GenericCmd "run" args) = executeArgs args
-doInterpret (DeclCmd var expr) = either (return $ liftIO $ putStrLn exprError) (setVar var) (runExcept $ evalExpr expr)
-  >> return []
-  where
-  exprError = "Used wrong expression to declare a variable."
+doInterpret (DeclCmd var expr) = if var == "EXITCODE" then printFail "Cannot assign to this variable." else
+  case runExcept $ evalExpr expr of
+    Left msg -> printFail msg
+    Right val -> setVar var val >> return []
 doInterpret (AliasCmd alias val) =
   if alias == "let"
     then printFail "Cannot alias with the name \"let\"."
