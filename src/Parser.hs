@@ -79,10 +79,12 @@ unescaper = go def
     go EState{escSt = ENormal, spSt = EAfterSpace, strSt = ENoStr} ('~':rest) = do
       home <- getVarStr "HOME"
       (home ++) <$> go def rest
-    go e@EState{escSt = EEscaped} (c:rest) = ('\\':) . (c:) <$> go e{escSt = def} rest
+    go e@EState{escSt = EEscaped} (c:rest) =
+      (if c `elem` specials then id else ('\\':)) . (c:) <$> go e{escSt = def} rest
     go e ('\"':rest) = ('\"':) <$> go e{strSt = flup $ strSt e} rest
     go e ('\'':rest) = ('\'':) <$> go e{strSt = flup $ strSt e} rest
     go e (c:rest) = (c:) <$> go def{strSt = strSt e} rest
+    specials = ['\"', '\'', '$', '~']
 
 doPreprocess :: String -> Shell String
 doPreprocess = unescaper
@@ -142,7 +144,6 @@ doParseLine :: Text -> Shell Command
 doParseLine t = do
   ecpeb <- runParserT commandParser "input command" t
   either (\peb -> DoNothing <$ liftIO (putStrLn $ errorBundlePretty peb)) return ecpeb
-
 -- TODO: maybe one can make those for generic Char streams?
 
 sc :: Parser ()
