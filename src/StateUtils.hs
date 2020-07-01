@@ -1,11 +1,11 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds, FlexibleContexts, OverloadedStrings #-}
 module StateUtils where
 
 import System.Exit
 
 import Control.Monad.Reader
 
+import Data.Maybe
 import Data.Map ((!))
 import qualified Data.Map as Map
 
@@ -28,6 +28,11 @@ getVar name = do
  stRef <- ask
  st <- readIORef stRef
  return $ Map.lookup name $ shellStEnv st
+
+getVarStr :: String -> Shell String
+getVarStr name = do
+  val <- getVar name
+  return $ show $ fromMaybe (VStr "") val
 
 
 getPath :: Shell Path

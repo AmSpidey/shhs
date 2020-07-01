@@ -41,3 +41,10 @@ joinByBackslash (line:lines) =
                 [] -> [l]
                 l':ls' -> (l ++ l'):ls'
             _ -> line:res
+
+fixM :: (Monad m, Eq a) => (a -> m a) -> a -> m a
+fixM f x = do
+  fx <- f x
+  if fx == x
+    then return x
+    else fixM f fx

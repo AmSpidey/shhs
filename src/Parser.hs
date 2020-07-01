@@ -8,6 +8,9 @@ import Data.Char
 import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Maybe
+import Data.Set (Set)
+import qualified Data.Set as Set
+
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -22,39 +25,6 @@ import StateUtils
 data Arg = Generic Text | Redirect (Text, Path)
 
 -- | Preprocessing part.
-{-
-doPreprocess :: String -> Shell String
-doPreprocess t = do
-  ecpeb <- runParserT (linePreprocessor 0) "preprocessing" $ T.pack t
-  either (\peb -> t <$ liftIO (putStrLn $ errorBundlePretty peb)) return ecpeb
-
-linePreprocessor :: Integer -> Parser String
-linePreprocessor acc = do
-  x <- optional pCharAndEscape
-  case x of
-    Nothing -> return ""
-    Just x' -> do
-      let escape = x' == '\\'
-      let acc' = if escape then acc + 1 else 0
-      if x' == '$' && acc `mod` 2 == 0
-        then do
-          val <- preprocessVar
-          next <- linePreprocessor acc'
-          return $ val ++ next
-        else do
-          next <- linePreprocessor acc'
-          return $ (if escape && acc' `mod` 2 == 1 then "" else [x']) ++ next
-
-preprocessVar :: Parser String
-preprocessVar = do
-    var <- pName
-    val <- getVar var
-    return $ show $ fromMaybe (VStr "") val
-
-pCharAndEscape :: Parser Char
-pCharAndEscape = try (char '\\') <|> L.charLiteral   return $ show $ fromMaybe (VStr "") val
--}
-
 --this is my best attempt at a bitmap one could pattern match into
 
 data EscapeState = ENormal | EEscaped
@@ -88,11 +58,6 @@ class Flippable f where
 instance Flippable StrState where
   flup ENoStr = EString
   flup EString = ENoStr
-
-getVarStr :: String -> Shell String
-getVarStr name = do
-  val <- getVar name
-  return $ show $ fromMaybe (VStr "") val
 
 unescaper :: String -> Shell String
 unescaper = go def
@@ -198,6 +163,7 @@ symbol = L.symbol sc
 integer :: Parser Integer
 integer = lexeme L.decimal
 
+-- XXX: debug
 debPrInput :: Parser ()
 debPrInput = do
   inp <- getInput
@@ -208,8 +174,6 @@ quote = char '\"' <|> char '\''
 
 stringLiteral :: Parser Text
 stringLiteral = lexeme $ quote *> takeWhileP Nothing (/= '\"') <* quote
-
---manyTill (liftIO (putStrLn "charxd") >> debPrInput >> L.charLiteral <* debPrInput) (char '\"'))
 
 pKeyword :: Text -> Parser Text
 pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
@@ -283,15 +247,16 @@ addAliasPrefix :: String -> Parser ()
 addAliasPrefix s = getAlias s >>= addPrefix
 
 pCommand :: Parser Command
-pCommand = do
-  name <- pName
-  if name == "let"
-    then pLet
-    else do
-    ifM (isAlias name) (addAliasPrefix name) (addPrefix name)
-    name' <- pName
-    (genericArgs, redirectArgs) <- distributeArgs <$> many (redirectArg <|> genericArg)
-    return $ constructCommand name' redirectArgs genericArgs
+pCommand = go Set.empty
+  where
+    go :: Set String -> Parser Command
+    go m = do
+      name <- pName
+      if name == "let"
+        then pLet
+        else ifM ((name `Set.notMember` m &&) <$> isAlias name) (addAliasPrefix name >> go (Set.insert name m)) $ do
+          (genericArgs, redirectArgs) <- distributeArgs <$> many (redirectArg <|> genericArg)
+          return $ constructCommand name redirectArgs genericArgs
 
 pCommandList :: Parser Command
 pCommandList = foldl1 Pipe <$> pCommand `sepBy1` symbol "|"
