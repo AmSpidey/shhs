@@ -222,8 +222,10 @@ defaultRunShell m = do
 
 runShell :: ShellState -> Shell a -> IO a
 runShell st m = do
+  homeDir <- getHomeDirectory
+  let initSettings = defaultSettings { historyFile = Just $ homeDir ++ "/.hsh_history" }
   stRef <- newIORef st
-  runInputT defaultSettings (runReaderT m stRef)
+  runInputT initSettings (runReaderT m stRef)
 
 initEnv :: Env -> IO Env
 initEnv env = do
