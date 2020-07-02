@@ -199,7 +199,6 @@ withColor r g b s = rgb r g b ++ s ++ setSGRCode [SetDefaultColor Foreground]
 getPrompt :: Shell String
 getPrompt = do
   pr <- getVarStr "PROMPT"
-  stRef <- ask
   home <- getVarStr "HOME"
   curDir <- getVarStr "PWD"
   setVar "HOME" (VStr "~")
@@ -222,7 +221,6 @@ getPrompt = do
 runDotFile :: Shell ()
 runDotFile = do
   home <- getVarStr "HOME"
-  curDir <- getVarStr "PWD"
   whenM (doesFileExist $ home ++ "/.hshrc") $ void $ interpretCmd "run ~/.hshrc"
 
 
@@ -251,9 +249,13 @@ initEnv :: Env -> IO Env
 initEnv env = do
   home <- strToVal <$> getHomeDirectory
   curDir <- strToVal <$> getCurrentDirectory
-  let defaultPrompt = strToVal $ rgb 72 52 101 ++ "λ " ++ rgb 102 73 142 ++ "$PWD" ++ rgb 155 62 144 ++ " >>= " ++ setSGRCode [SetDefaultColor Foreground]
-      initVars = Map.fromList [("HOME", home), ("PWD", curDir), ("PROMPT", defaultPrompt)]
+  let initVars = Map.fromList [("HOME", home), ("PWD", curDir), ("PROMPT", defaultPromptVal)]
   return $ Map.union initVars env
+
+  where
+  defaultPromptVal :: Val
+  defaultPromptVal = 
+    strToVal $ rgb 72 52 101 ++ "λ " ++ rgb 102 73 142 ++ "$PWD" ++ rgb 155 62 144 ++ " >>= " ++ setSGRCode [SetDefaultColor Foreground]
 
 
 initState :: IO ShellState
