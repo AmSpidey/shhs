@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, GADTs, RecordWildCards #-}
-module Parser (parseCmd, doPreprocess) where
+module Parser (parseCmd, doPreprocess, unescaper) where
 
 import Control.Monad
 import Control.Monad.IO.Class
