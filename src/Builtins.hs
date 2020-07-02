@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Builtins where
 
 import Data.Word (Word8)
@@ -10,7 +11,7 @@ builtinNames =
 type RGB = (Word8, Word8, Word8)
 
 builtinColors :: Map String RGB
-builtinColors = 
+builtinColors =
     fromList [
         ("black", (0,0,0)),
         ("white", (255,255,255)),
@@ -32,3 +33,4 @@ builtinColors =
 
 errColorKey :: String
 errColorKey = "ERRCOLOR"
+
