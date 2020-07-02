@@ -1,0 +1,5 @@
+# default aliases
+let alias ls = "ls --color=tty"
+let alias grep = "grep  --color=auto --exclude-dir={.bzr,CVS,.git,.hg,.svn}"
+let alias grefni = "grep -rFnI"
+let alias l = "ls -lah"
