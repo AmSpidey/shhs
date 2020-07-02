@@ -35,8 +35,11 @@ if ! grep hsh /etc/shells &> /dev/null; then
     echo "/bin/hsh" | tee -a /etc/shells
 fi
 
-echo "Copying default settings to ~/.hshrc"
-cp conf/.hshrc "$USER_HOME" &> /dev/null
+echo "Copying default settings to ~/.hshrc..."
+DEFAULT_HSHRC_PATH="conf/.hshrc"
+if ! cp $DEFAULT_HSHRC_PATH $USER_HOME &> /dev/null; then
+    echo "Warning: missing file $DEFAULT_HSHRC_PATH"
+fi
 
 echo -n "Update default shell for user $real_user (y/n)? "
 read answer
