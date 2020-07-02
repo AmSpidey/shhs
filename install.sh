@@ -31,6 +31,10 @@ if ! grep hsh /etc/shells &> /dev/null; then
     printf "Updating /etc/shells...\n"
     echo "/bin/hsh" | tee -a /etc/shells
 fi
+
+echo "Copying default settings to ~/.hshrc"
+cp ./conf/.hshrc ~/.hshrc &> /dev/nu
+
 echo -n "Update default shell for user $real_user (y/n)? "
 read answer
 if [ "$answer" != "${answer#[Yy]}" ] ; then
