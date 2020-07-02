@@ -77,6 +77,7 @@ printFail msg = do
   setErrCode (ExitFailure 1)
   return [APrintErr msg]
 
+
 doInterpret :: Command -> Shell [Action]
 -- TODO: if this has access to IO, then could it not just perform the relevant actions?
 -- For now the actions are left in just in case we want to do something in another place.
@@ -195,13 +196,33 @@ rgb r g b = setSGRCode [SetRGBColor Foreground (sRGB24 r g b)]
 withColor :: Word8 -> Word8 -> Word8 -> String -> String
 withColor r g b s = rgb r g b ++ s ++ setSGRCode [SetDefaultColor Foreground]
 
-prompt :: Path -> String
-prompt path =
-  rgb 72 52 101 ++ "λ " ++ rgb 102 73 142 ++ path ++ rgb 155 62 144 ++ " >>= " ++ setSGRCode [SetDefaultColor Foreground]
+getPrompt :: Shell String
+getPrompt = do
+  pr <- getVarStr "PROMPT"
+  stRef <- ask
+  home <- getVarStr "HOME"
+  curDir <- getVarStr "PWD"
+  setVar "HOME" (VStr "~")
+  case trimCommonPrefix home curDir of
+    Nothing -> return ()
+    Just suf -> setVar "PWD" (strToVal $ "~" ++ suf)
+  res <- doPreprocess pr
+  setVar "HOME" (strToVal home)
+  setVar "PWD" (strToVal curDir)
+  return res
+
+  where
+  -- trimCommonSuffix x (x ++ y) = Just y
+  -- trimCommonSuffix _ _        = Nothing
+  trimCommonPrefix :: String -> String -> Maybe String
+  trimCommonPrefix [] ys = Just ys
+  trimCommonPrefix (x:xs) (y:ys) | x == y = trimCommonPrefix xs ys
+  trimCommonPrefix _ _ = Nothing
 
 runDotFile :: Shell ()
 runDotFile = do
   home <- getVarStr "HOME"
+  curDir <- getVarStr "PWD"
   whenM (doesFileExist $ home ++ "/.hshrc") $ void $ interpretCmd "run ~/.hshrc"
 
 
@@ -211,7 +232,8 @@ startShell = defaultRunShell $ runDotFile >> loop
     loop :: Shell ()
     loop = do
       path <- getPath
-      input <- lift $ async $ getInputLine $ prompt path
+      pr <- getPrompt
+      input <- lift $ async $ getInputLine pr
       eventsManager [input]
       loop
 
@@ -227,13 +249,16 @@ runShell st m = do
 
 initEnv :: Env -> IO Env
 initEnv env = do
-  home <- VStr . T.pack <$> getHomeDirectory
-  return $ Map.insert "HOME" home env
+  home <- strToVal <$> getHomeDirectory
+  curDir <- strToVal <$> getCurrentDirectory
+  let defaultPrompt = strToVal $ rgb 72 52 101 ++ "λ " ++ rgb 102 73 142 ++ "$PWD" ++ rgb 155 62 144 ++ " >>= " ++ setSGRCode [SetDefaultColor Foreground]
+      initVars = Map.fromList [("HOME", home), ("PWD", curDir), ("PROMPT", defaultPrompt)]
+  return $ Map.union initVars env
 
 
 initState :: IO ShellState
 initState = do
-  env <- Map.map (VStr . T.pack) . Map.fromList <$> getEnvironment
+  env <- Map.map strToVal . Map.fromList <$> getEnvironment
   env' <- initEnv env
   ShellState env'
     <$> getCurrentDirectory
