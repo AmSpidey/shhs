@@ -2,6 +2,9 @@
 
 set -e
 
+# ref: https://stackoverflow.com/a/7359006
+USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
+
 # ref: https://askubuntu.com/a/30157/8698
 if ! [ $(id -u) = 0 ]; then
     echo "The script need to be run as root." >&2
@@ -33,7 +36,7 @@ if ! grep hsh /etc/shells &> /dev/null; then
 fi
 
 echo "Copying default settings to ~/.hshrc"
-cp ./conf/.hshrc ~/.hshrc &> /dev/nu
+cp conf/.hshrc "$USER_HOME" &> /dev/null
 
 echo -n "Update default shell for user $real_user (y/n)? "
 read answer
