@@ -211,8 +211,8 @@ getPrompt = do
   return res
 
   where
-  -- trimCommonSuffix x (x ++ y) = Just y
-  -- trimCommonSuffix _ _        = Nothing
+  -- trimCommonPrefix x (x ++ y) = Just y
+  -- trimCommonPrefix _ _        = Nothing
   trimCommonPrefix :: String -> String -> Maybe String
   trimCommonPrefix [] ys = Just ys
   trimCommonPrefix (x:xs) (y:ys) | x == y = trimCommonPrefix xs ys
