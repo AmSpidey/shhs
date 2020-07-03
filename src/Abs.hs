@@ -37,7 +37,7 @@ instance Show Val where
   show (VStr t) = T.unpack t
   show (VInt i) = show i
 
-type Path = String -- TODO: this should be an actual type
+type Path = String
 
 type Env = Map String Val
 type AliasMap = Map String String
@@ -107,7 +107,6 @@ instance Show PipelineRedirect where
   show (PRStdinSource h) =  pink ++ "in:" ++ show h
   show PRCancel =  withColor 255 0 255 "#cancelled" ++ resetCol
 
--- TODO: refactor this into two ctors PNode and PBound
 data Pipeline
   = PRedirect Pipeline PipelineRedirect Pipeline
   | PProc Pipeline PipelineProc Pipeline
@@ -121,9 +120,8 @@ rgb r g b = setSGRCode [SetRGBColor Foreground (sRGB24 r g b)]
 withColor :: Word8 -> Word8 -> Word8 -> String -> String
 withColor r g b s = rgb r g b ++ s ++ setSGRCode [SetDefaultColor Foreground]
 
-resetCol :: String
+resetCol, red, green, pink, yellow, blue :: String
 resetCol = setSGRCode [SetDefaultColor Foreground]
-red :: String
 red = rgb 255 0 0
 green = rgb 0 140 0
 pink = rgb 255 0 255
@@ -167,7 +165,6 @@ data Action
 data Command
   = DoNothing
   | GenericCmd String [Text]
---  | forall a. TypedCmd String (ParseGuide a)
   | DeclCmd String Expr
   | AliasCmd String String
   | Pipe [Command]
@@ -192,19 +189,7 @@ instance Show Command where
   show (RedirectOut path cmd) = show cmd ++ " > " ++ show path
   show (RedirectErr path cmd) = show cmd ++ " 2> " ++ show path
   show (RedirectIn path cmd) = show cmd ++ " < " ++ show path
-  show _ = error "cannot show :("
 
--- -- | Command type building blocks.
--- -- Designed so that a Megaparsec parser made from them is well-typed.
--- data ParseGuide a where
---   NoArgs   :: ParseGuide ()
---   Many     :: ParseGuide a -> ParseGuide [a]
---   (:+:)    :: ParseGuide a -> ParseGuide b -> ParseGuide (a, b)
---   (:>:)    :: ParseGuide a -> ParseGuide b -> ParseGuide b
---   ExactStr :: String -> ParseGuide Text
---   Discard  :: ParseGuide a -> ParseGuide ()
---   AnyStr   :: ParseGuide Text
---   AnyInt   :: ParseGuide Integer
 
 
 -- Parser types

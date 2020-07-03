@@ -65,7 +65,7 @@ unescaper = go def
     go e@EState{escSt = ENormal} ('\\':rest) = go e{escSt = EEscaped} rest
     go e@EState{escSt = ENormal} ('$':rest) = do
       let rep = def{strSt = strSt e}
-      ecpeb <- runParserT pVarNameAndRest "preprocessing" rest -- TODO: this makes preprocessing O(n^2)
+      ecpeb <- runParserT pVarNameAndRest "preprocessing" rest
       case ecpeb of
         Left peb -> ('$':) <$> go rep rest
         Right (name, rest') -> do
@@ -143,7 +143,6 @@ doParseLine t = do
   either (\peb -> DoNothing <$ liftIO (putStrLn $ errorBundlePretty peb)) return ecpeb
 
 
--- TODO: maybe one can make those for generic Char streams?
 
 sc :: Parser ()
 sc = L.space space1 (L.skipLineComment "#") empty
@@ -241,7 +240,6 @@ pLetVar = do
 addPrefix :: String -> Parser ()
 addPrefix s = do
   inp <- getInput
--- TODO: this will not do when input is script file, O(n^2) complexity!
   setInput $ T.snoc (T.pack s) ' ' `T.append` inp
 --  inp' <- getInput
 --  liftIO $ putStrLn $ "new input: \"" ++ T.unpack inp' ++ "\""

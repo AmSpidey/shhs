@@ -15,8 +15,6 @@ import UnliftIO
 import Abs
 import Utils
 
--- TODO: make all functions use this synonym - otherwise they can't be used in parser
-
 type ShM m = (MonadReader (IORef ShellState) m, MonadIO m)
 
 getRef :: ShM m => m (IORef ShellState)
@@ -69,7 +67,6 @@ startJob :: Shell Job
 startJob = do
   stRef <- getRef
   job <- generateJobID
-  -- TODO: make this wait for previous job completion? or get rid of activeJob and pass id by hand
   mj <- getActiveJob
   when (isJust mj) $ error $ "this is hsh bug :(" ++ show mj
   modifyIORef stRef $ \st -> st{activeJob = Just job, activeProcesses = Map.insert job [] $ activeProcesses st}

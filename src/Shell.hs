@@ -104,7 +104,7 @@ doInterpret (Pipe cmds@(_:_)) = [APipe $ map doInterpret cmds]
 doInterpret (RedirectIn path cmd) = [ARedirect RStdin path $ doInterpret cmd]
 doInterpret (RedirectOut path cmd) = [ARedirect RStdout path $ doInterpret cmd]
 doInterpret (RedirectErr path cmd) = [ARedirect RStderr path $ doInterpret cmd]
-doInterpret _ = [] -- TODO: more commands :P
+doInterpret _ = []
 
 
 interpretCmd :: String -> Shell [Action]
@@ -382,7 +382,7 @@ execPipeline (PProc prev (RunCommand (name:args)) next) = do
                     actionsList <- mapM interpretCmd $ joinByBackslash lines'
                     setConfig conf'''
                     ecref <- liftIO $ newIORef ExitSuccess
-                    mapM_ (\case -- TODO: this cannot stand if we become turing complete
+                    mapM_ (\case
                               AExit code -> writeIORef ecref code
                               a -> execSingleAction a) $ concat actionsList
                     readIORef ecref

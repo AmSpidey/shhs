@@ -37,7 +37,7 @@ unsnoc (x:xs) = Just (x:a, b)
 joinByBackslash :: [String] -> [String]
 joinByBackslash [] = []
 joinByBackslash (line:rest) =
-    let res = joinByBackslash rest in -- TODO make it tail recursive
+    let res = joinByBackslash rest in
         case unsnoc line of
             Nothing -> res
             Just (l, '\\') -> case res of
