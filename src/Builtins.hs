@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 module Builtins where
 
 import Data.Word (Word8)

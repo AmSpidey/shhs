@@ -2,6 +2,9 @@
 
 set -e
 
+# ref: https://stackoverflow.com/a/7359006
+USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
+
 # ref: https://askubuntu.com/a/30157/8698
 if ! [ $(id -u) = 0 ]; then
     echo "The script need to be run as root." >&2
@@ -31,6 +34,13 @@ if ! grep hsh /etc/shells &> /dev/null; then
     printf "Updating /etc/shells...\n"
     echo "/bin/hsh" | tee -a /etc/shells
 fi
+
+echo "Copying default settings to ~/.hshrc..."
+DEFAULT_HSHRC_PATH="conf/.hshrc"
+if ! cp $DEFAULT_HSHRC_PATH $USER_HOME &> /dev/null; then
+    echo "Warning: missing file $DEFAULT_HSHRC_PATH"
+fi
+
 echo -n "Update default shell for user $real_user (y/n)? "
 read answer
 if [ "$answer" != "${answer#[Yy]}" ] ; then

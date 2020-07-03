@@ -8,6 +8,7 @@ import Control.Monad.Reader
 import Data.Maybe
 import Data.Map (Map, (!))
 import qualified Data.Map as Map
+import Data.Text as T
 
 import UnliftIO
 
@@ -99,7 +100,8 @@ getPath = do
 setPath :: Path -> Shell ()
 setPath p = do
   stRef <- getRef
-  modifyIORef stRef $ \st -> st{shellStPath = p}
+  setVar "PWD" (strToVal p)
+  modifyIORef stRef $ \st -> st {shellStPath = p}
 
 setErrCode :: ExitCode -> Shell ()
 setErrCode i = do
@@ -171,4 +173,7 @@ withSavedConfig :: Shell a -> Shell a
 withSavedConfig m = do
   conf <- getConfig
   m `finally` setConfig conf
+
+strToVal :: String -> Val
+strToVal = VStr . T.pack
 

@@ -1,5 +1,5 @@
-{-# LANGUAGE OverloadedStrings, GADTs, RecordWildCards #-}
-module Parser (parseCmd, doPreprocess) where
+{-# LANGUAGE OverloadedStrings, GADTs #-}
+module Parser (parseCmd, doPreprocess, unescaper) where
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -67,8 +67,7 @@ unescaper = go def
       let rep = def{strSt = strSt e}
       ecpeb <- runParserT pVarNameAndRest "preprocessing" rest -- TODO: this makes preprocessing O(n^2)
       case ecpeb of
-        Left peb -> --do liftIO $ putStrLn $ "Getting variable name failed!\n" ++ errorBundlePretty peb
-                       ('$':) <$> go rep rest
+        Left peb -> ('$':) <$> go rep rest
         Right (name, rest') -> do
           val <- getVarStr name
           (val ++) <$> go rep rest'

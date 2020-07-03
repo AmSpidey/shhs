@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings, LambdaCase #-}
 module Shell where
 
+
 import Prelude hiding (last)
 
 import System.IO hiding (hClose, withFile)
-import System.Exit
 import System.Environment
 import System.Process.Typed
 import System.Console.ANSI.Codes
@@ -27,16 +27,20 @@ import Control.DeepSeq
 
 import GHC.IO.Handle hiding (hClose)
 
-import UnliftIO
 import UnliftIO.Directory
-import UnliftIO.Exception
+import UnliftIO.Exception hiding (Handler)
 import qualified UnliftIO.Process as P
+import UnliftIO hiding (Handler)
 
 import Abs
 import Builtins
 import Parser
 import Utils
 import StateUtils
+
+import System.Exit
+import System.Posix.Signals
+import Control.Concurrent
 
 -- Expressions evaluation
 
@@ -68,6 +72,7 @@ resolveLocalName name = do
 
 printFail :: String -> [Action]
 printFail msg = [APrintErr msg, AIOAction $ setErrCode (ExitFailure 1) >> return []]
+
 
 mkIOAction :: Shell [Action] -> [Action]
 mkIOAction = (:[]) . AIOAction
@@ -440,9 +445,27 @@ eventsManager events = do
 
 
 
-prompt :: Path -> String
-prompt path =
-  rgb 72 52 101 ++ "λ " ++ rgb 102 73 142 ++ path ++ rgb 155 62 144 ++ " >>= " ++ setSGRCode [SetDefaultColor Foreground]
+getPrompt :: Shell String
+getPrompt = do
+  pr <- getVarStr "PROMPT"
+  home <- getVarStr "HOME"
+  curDir <- getVarStr "PWD"
+  setVar "HOME" (VStr "~")
+  case trimCommonPrefix home curDir of
+    Nothing -> return ()
+    Just suf -> setVar "PWD" (strToVal $ "~" ++ suf)
+  res <- doPreprocess pr
+  setVar "HOME" (strToVal home)
+  setVar "PWD" (strToVal curDir)
+  return res
+
+  where
+  -- trimCommonPrefix x (x ++ y) = Just y
+  -- trimCommonPrefix _ _        = Nothing
+  trimCommonPrefix :: String -> String -> Maybe String
+  trimCommonPrefix [] ys = Just ys
+  trimCommonPrefix (x:xs) (y:ys) | x == y = trimCommonPrefix xs ys
+  trimCommonPrefix _ _ = Nothing
 
 runDotFile :: Shell ()
 runDotFile = do
@@ -456,7 +479,8 @@ startShell = defaultRunShell $ runDotFile >> loop
     loop :: Shell ()
     loop = do
       path <- getPath
-      input <- async $ lift $ getInputLine $ prompt path
+      pr <- getPrompt
+      input <- async $ lift $ getInputLine pr
       eventsManager [input]
       loop
 
@@ -467,18 +491,31 @@ defaultRunShell m = do
 
 runShell :: ShellState -> Shell a -> IO a
 runShell st m = do
+  homeDir <- getHomeDirectory
   stRef <- newIORef st
-  runInputT defaultSettings (runReaderT m stRef)
+  let initSettings = (defaultSettings :: Settings IO)
+        { historyFile = Just $ homeDir ++ "/.hsh_history"
+        , complete = \ss -> do
+            st <- readIORef stRef
+            withCurrentDirectory (shellStPath st) $ completeFilename ss} :: Settings IO
+  runInputT initSettings (runReaderT m stRef)
 
 initEnv :: Env -> IO Env
 initEnv env = do
-  home <- VStr . T.pack <$> getHomeDirectory
-  return $ Map.insert "HOME" home env
+  home <- strToVal <$> getHomeDirectory
+  curDir <- strToVal <$> getCurrentDirectory
+  let initVars = Map.fromList [("HOME", home), ("PWD", curDir), ("PROMPT", defaultPromptVal)]
+  return $ Map.union initVars env
+
+  where
+  defaultPromptVal :: Val
+  defaultPromptVal = 
+    strToVal $ rgb 72 52 101 ++ "λ " ++ rgb 102 73 142 ++ "$PWD" ++ rgb 155 62 144 ++ " >>= " ++ setSGRCode [SetDefaultColor Foreground]
 
 
 initState :: IO ShellState
 initState = do
-  env <- Map.map (VStr . T.pack) . Map.fromList <$> getEnvironment
+  env <- Map.map strToVal . Map.fromList <$> getEnvironment
   env' <- initEnv env
   ShellState env'
     <$> getCurrentDirectory
@@ -488,6 +525,8 @@ initState = do
     <*> pure Nothing
     <*> pure Map.empty
 
+ignoreSIGINT :: IO Handler
+ignoreSIGINT = installHandler keyboardSignal (Catch (return ())) Nothing
 
 hshMain :: IO ()
 hshMain = do
@@ -495,7 +534,7 @@ hshMain = do
   env <- initState
   case args of
     "-c":rest -> runShell env $ interpretCmd (unwords rest) >>= mapM_ execAction
-    _ -> startShell
+    _ -> ignoreSIGINT >> startShell
 
 --- DEBUG
 

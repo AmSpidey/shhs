@@ -154,9 +154,7 @@ getLast p = case p of
     go PBound = p
     go n = getLast n
 
-data Job = Job {jobID :: String} deriving (Show, Eq, Ord)
-
-
+newtype Job = Job {jobID :: String} deriving (Show, Eq, Ord)
 
 data Action
   = APrintErr String

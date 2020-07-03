@@ -35,6 +35,7 @@ dependencies:
 - random
 - typed-process
 - deepseq
+- unix
 
 library:
   source-dirs: src
