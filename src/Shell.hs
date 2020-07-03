@@ -394,13 +394,14 @@ execPipeline (PProc prev (ProgramExec name args) next) = do
   dprint $ "Exec'ing process with conf: " ++ red ++ show conf''' ++ resetCol
   grabCode $ do
     dprint $ "Start " ++ show conf'''
-    ec <- withCurrentDirectory path $ runProcess conf'''
+    ec <- withCurrentDirectory path $ runProcess $ setNewSession True conf'''
 --    dprint $ "End" ++ show conf'''
     return ec
   dprint $ "Exec'd process..."
-  when (isJust hin && fromJust hin /= stdin) $ hClose $ fromJust hin
-  when (isJust hout && fromJust hout `notElem` outHandles) $ hClose $ fromJust hout
-  when (isJust herr && fromJust herr `notElem` outHandles) $ hClose $ fromJust herr
+  -- when (isJust hin && fromJust hin /= stdin) $ hClose $ fromJust hin
+  -- when (isJust hout && fromJust hout `notElem` outHandles) $ hClose $ fromJust hout
+  -- when (isJust herr && fromJust herr `notElem` outHandles) $ hClose $ fromJust herr
+  
   execPipeline next
 
 outHandles :: [Handle]
@@ -414,7 +415,7 @@ handleWithIt handle = if handle `elem` [stdin, stdout, stderr] then useHandleOpe
 grabCode :: Shell ExitCode -> Shell ()
 grabCode action = do
   mj <- getActiveJob
---  dprint $ "Actually exec'ing, job=" ++ show mj
+  --  dprint $ "Actually exec'ing, job=" ++ show mj
   case mj of
     Nothing -> catchIO action (\e -> act (printFail $ "Command failed :(\n" ++ show e) >> return (ExitFailure 1)) >>= setErrCode
     Just _ -> async action >>= addActiveProc
