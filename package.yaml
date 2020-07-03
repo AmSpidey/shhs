@@ -34,6 +34,7 @@ dependencies:
 - parser-combinators
 - random
 - typed-process
+- deepseq
 
 library:
   source-dirs: src

@@ -23,6 +23,7 @@ import Data.Map ((!?))
 
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.DeepSeq
 
 import GHC.IO.Handle hiding (hClose)
 
@@ -360,6 +361,7 @@ execPipeline (PProc prev (RunCommand (name:args)) next) = do
                 let sources = getSources prev
                     (outSinks, errSinks) = getSinks next
                 in do
+                  dprint $ "Running file " ++ name'
                   conf <- getConfig
                   conf' <- if null sources then return conf else do
                     h <- combineHandles ReadMode sources
@@ -370,9 +372,9 @@ execPipeline (PProc prev (RunCommand (name:args)) next) = do
                   conf''' <- if null errSinks then return conf'' else do
                     h <- combineHandles WriteMode errSinks
                     return conf{stderrH = HHandle h}
-
+                  lines' <- return $!! lines $!! fContents
                   grabCode $ do
-                    actionsList <- mapM interpretCmd $ joinByBackslash $ lines fContents
+                    actionsList <- mapM interpretCmd $ joinByBackslash lines'
                     setConfig conf'''
                     ecref <- liftIO $ newIORef ExitSuccess
                     mapM_ (\case -- TODO: this cannot stand if we become turing complete
