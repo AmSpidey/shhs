@@ -84,7 +84,7 @@ randomString :: MonadIO m => Int -> m String
 randomString i = liftIO $ replicateM i $ randomRIO ('a','z')
 
 debug :: Bool
-debug = True
+debug = False
 
 dprint :: MonadIO m => String -> m ()
 dprint = when debug . liftIO . putStrLn

@@ -135,6 +135,25 @@ instance Show Pipeline where -- only go forward
   show (PAction _ _ next) = blue ++ "{IOaction}" ++ resetCol ++ "-" ++ show next
   show PBound = withColor 210 105 30 "|"
 
+showLeft :: Pipeline -> String
+showLeft (PRedirect next rdr _) = red ++ "rdr{" ++ show rdr ++ red ++ "}" ++ resetCol ++ "-" ++ showLeft next
+showLeft (PProc next desc _) = green ++ "desc{" ++ show desc ++ green ++ "}" ++ resetCol ++ "-" ++ showLeft next
+showLeft (PAction next _ _) = blue ++ "{IOaction}" ++ resetCol ++ "-" ++ showLeft next
+showLeft PBound = withColor 210 105 30 "|"
+
+doShowLeft :: Pipeline -> String
+doShowLeft = showLeft . getLast
+
+getLast :: Pipeline -> Pipeline
+getLast p = case p of
+  PBound -> PBound
+  (PRedirect _ _ n) -> go n
+  (PProc _ _ n) -> go n
+  (PAction _ _ n) -> go n
+  where
+    go PBound = p
+    go n = getLast n
+
 data Job = Job {jobID :: String} deriving (Show, Eq, Ord)
 
 

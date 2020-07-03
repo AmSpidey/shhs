@@ -151,8 +151,11 @@ execAction a = dprint ("Exec'ing action " ++ show a ++ "...") >> go a >> dprint 
       conf <- getConfig
       job <- startJob
       let pipe = mkPipeline as conf
+      dprint $ "Before plug: " ++ show pipe
+      dprint $ "And from the left: " ++ doShowLeft pipe
       pipe' <- plugPipes pipe
       dprint $ "Exec'ing pipe " ++ show pipe'
+      dprint $ "And from the left: " ++ doShowLeft pipe'
       execPipeline pipe'
       ps <- getJobProcs
       dprint $ "waiting for " ++ show (length ps) ++ " procs"
@@ -232,7 +235,7 @@ mkPipeline actions conf =
                         in (red1, red2')
                       ARedirect RStdout p ras -> go [ras] c{stdoutH = HPath p} res3 res1
                       ARedirect RStderr p ras -> go [ras] c{stderrH = HPath p} res3 res1
-                      _ -> panic
+                      _ -> error $ "mkPipeline " ++ show x
                   (res3, res3') = if null suf then (res4, res2') else let x = PAction res2' (act suf) res4 in (x, x)
                   (res4, resLast) = go' rest c last res3'
               in (if null pref then res2 else res1, resLast)
@@ -293,19 +296,20 @@ insertAfter _ _ = undefined
 getHandle :: IOMode -> HsHandle  -> Shell Handle
 getHandle _ (HHandle h) = return h
 getHandle mode (HPath p) = liftIO $ openFile p mode
-getHandle _ HPipe = panic
+getHandle _ HPipe = error "getHandle HPipe"
 
 
 
 combineHandles :: IOMode -> [HsHandle] -> Shell Handle
 combineHandles _ [] = error "need at least one handle"
-combineHandles m hs = do
-  h <- mapM (getHandle m)  hs
-  liftIO $ fold1M go h
-  where
-    go :: Handle -> Handle -> IO Handle
-    go h1 h2 = hDuplicateTo h1 h2 $> h1
-    -- TODO: make sure stdin etc are not destroyed
+combineHandles m (h:_) = getHandle m h
+-- combineHandles m hs = do
+--   h <- mapM (getHandle m)  hs
+--   liftIO $ fold1M go h
+--   where
+--     go :: Handle -> Handle -> IO Handle
+--     go h1 h2 = hDuplicateTo h1 h2 $> h1
+
 
 countPipes :: Pipeline -> Int
 countPipes (PRedirect _ (PRStdinSource HPipe) (PRedirect _ (PRStdoutSink HPipe) next)) = 1 + countPipes next
@@ -319,29 +323,33 @@ plugPipes :: Pipeline -> Shell Pipeline
 plugPipes p = do
   let c = countPipes p
   hs <- replicateM c P.createPipe
-  return $ go p hs
+  return $ go p PBound hs
   where
-    go (PRedirect prev (PRStdinSource HPipe) (PRedirect _ (PRStdoutSink HPipe) next)) ((readH, writeH):rest) =
+    go :: Pipeline -> Pipeline -> [(Handle, Handle)] -> Pipeline
+    go (PRedirect _ (PRStdinSource HPipe) (PRedirect _ (PRStdoutSink HPipe) next)) prev ((readH, writeH):rest) =
       let rin = PRedirect (updateNext prev rin) (PRStdinSource $ HHandle readH) rout
           rout = PRedirect rin (PRStdoutSink $ HHandle writeH) next'
-          next' = go (updatePrev next rout) rest
+          next' = go (updatePrev next rout) rout rest
       in rin
-    go (PRedirect prev rdr next) hs = PRedirect prev rdr $ go next hs
-    go (PProc prev desc next) hs = PProc prev desc $ go next hs
-    go (PAction prev a next) hs = PAction prev a $ go next hs
-    go PBound [] = PBound
-    go _ _ = error "plugPipes"
+    go (PRedirect _ rdr next) prev hs =
+      let cur = PRedirect prev rdr next'
+          next' = go next cur hs
+      in cur
+    go (PProc _ desc next) prev hs =
+      let cur = PProc prev desc next'
+          next' = go next cur hs
+      in cur
+    go (PAction _ a next) prev hs =
+      let cur = PAction prev a next'
+          next' = go next cur hs
+      in cur
+    go PBound _ [] = PBound
+    go _ _ _ = error "plugPipes"
 
 
 execPipeline :: Pipeline -> Shell ()
 execPipeline PBound = return ()
 execPipeline (PAction _ action next) = action >> execPipeline next
--- execPipeline (PRedirect prev (PRStdinSource HPipe) (PRedirect _ (PRStdoutSink HPipe) next)) = do
---   (readH, writeH) <- P.createPipe
---   let rin = PRedirect (updateNext prev rin) (PRStdinSource $ HHandle readH) rout
---       rout = PRedirect rin (PRStdinSource $ HHandle writeH) next'
---       next' = updatePrev next rout
---   execPipeline next'
 execPipeline (PRedirect _ _ next) = execPipeline next
 execPipeline (PProc prev (RunCommand (name:args)) next) = do
   name' <- resolveLocalName $ T.unpack name
@@ -353,8 +361,6 @@ execPipeline (PProc prev (RunCommand (name:args)) next) = do
                     (outSinks, errSinks) = getSinks next
                 in do
                   conf <- getConfig
-                  -- TODO: this is cancer
-                  dprint "CHUJ DUPA XD"
                   conf' <- if null sources then return conf else do
                     h <- combineHandles ReadMode sources
                     return conf{stdinH = HHandle h}
@@ -395,13 +401,8 @@ execPipeline (PProc prev (ProgramExec name args) next) = do
   grabCode $ do
     dprint $ "Start " ++ show conf'''
     ec <- withCurrentDirectory path $ runProcess $ setCloseFds True $ setNewSession True conf'''
---    dprint $ "End" ++ show conf'''
     return ec
   dprint $ "Exec'd process..."
-  -- when (isJust hin && fromJust hin /= stdin) $ hClose $ fromJust hin
-  -- when (isJust hout && fromJust hout `notElem` outHandles) $ hClose $ fromJust hout
-  -- when (isJust herr && fromJust herr `notElem` outHandles) $ hClose $ fromJust herr
-  
   execPipeline next
 
 outHandles :: [Handle]
@@ -415,7 +416,6 @@ handleWithIt handle = if handle `elem` [stdin, stdout, stderr] then useHandleOpe
 grabCode :: Shell ExitCode -> Shell ()
 grabCode action = do
   mj <- getActiveJob
-  --  dprint $ "Actually exec'ing, job=" ++ show mj
   case mj of
     Nothing -> catchIO action (\e -> act (printFail $ "Command failed :(\n" ++ show e) >> return (ExitFailure 1)) >>= setErrCode
     Just _ -> async action >>= addActiveProc
@@ -494,4 +494,25 @@ hshMain = do
   case args of
     "-c":rest -> runShell env $ interpretCmd (unwords rest) >>= mapM_ execAction
     _ -> startShell
+
+--- DEBUG
+
+
+-- drs = defaultRunShell
+
+-- tppa :: IO Pipeline
+-- tppa = (\as -> mkPipeline ((\((APipe as'):[]) -> as') as) def) <$> drs (runDotFile >> interpretCmd "tpp")
+
+-- left :: Pipeline -> Pipeline
+-- left (PRedirect l _ _) = l
+-- left (PProc l _ _) = l
+-- left (PAction l _ _) = l
+-- left (PBound) = PBound
+-- right :: Pipeline -> Pipeline
+-- right (PRedirect _ _ l) = l
+-- right (PProc _ _ l) = l
+-- right (PAction _ _ l) = l
+-- right (PBound) = PBound
+
+-- showBoth p = putStrLn $ "Pipe: " ++ show p ++ "\nfrom the left:" ++ showLeft p
 
