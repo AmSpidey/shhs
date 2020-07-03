@@ -394,7 +394,7 @@ execPipeline (PProc prev (ProgramExec name args) next) = do
   dprint $ "Exec'ing process with conf: " ++ red ++ show conf''' ++ resetCol
   grabCode $ do
     dprint $ "Start " ++ show conf'''
-    ec <- withCurrentDirectory path $ runProcess $ setNewSession True conf'''
+    ec <- withCurrentDirectory path $ runProcess $ setCloseFds True $ setNewSession True conf'''
 --    dprint $ "End" ++ show conf'''
     return ec
   dprint $ "Exec'd process..."
