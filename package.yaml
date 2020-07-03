@@ -32,8 +32,9 @@ dependencies:
 - text
 - megaparsec
 - parser-combinators
-- replace-megaparsec
+- random
 - typed-process
+- deepseq
 - unix
 
 library:

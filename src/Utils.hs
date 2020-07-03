@@ -1,7 +1,10 @@
-
+{-# LANGUAGE BangPatterns #-}
 module Utils where
 
-import           Control.Exception              ( catch )
+import System.Random
+import Control.Monad
+import Control.Monad.IO.Class
+
 -- | The following 4 functions are adapted from the `extra` package.
 
 -- | Like 'when', but where the test can be monadic.
@@ -33,8 +36,8 @@ unsnoc (x:xs) = Just (x:a, b)
 
 joinByBackslash :: [String] -> [String]
 joinByBackslash [] = []
-joinByBackslash (line:lines) =
-    let res = joinByBackslash lines in -- TODO make it tail recursive
+joinByBackslash (line:rest) =
+    let res = joinByBackslash rest in -- TODO make it tail recursive
         case unsnoc line of
             Nothing -> res
             Just (l, '\\') -> case res of
@@ -48,3 +51,40 @@ fixM f x = do
   if fx == x
     then return x
     else fixM f fx
+
+concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
+concatMapM f l = concat <$> mapM f l
+
+-- Count the number of times a predicate is true
+-- From GHC implementation.
+
+count :: (a -> Bool) -> [a] -> Int
+count p = go 0
+  where go !n [] = n
+        go !n (x:xs) | p x       = go (n+1) xs
+                     | otherwise = go n xs
+
+panic :: a
+panic = error "This should never happen."
+
+splitByPred :: (a -> Bool) -> [a] -> ([a], a, [a])
+splitByPred f (x:xs)
+  | f x = ([], x, xs)
+  | otherwise =
+    let (pref, x', suf) = splitByPred f xs
+    in (x:pref, x', suf)
+splitByPred _ [] = panic
+
+
+fold1M :: Monad m => (a -> a -> m a) -> [a] -> m a
+fold1M f (x:xs) = foldM f x xs
+fold1M _ [] = error "fold1M"
+
+randomString :: MonadIO m => Int -> m String
+randomString i = liftIO $ replicateM i $ randomRIO ('a','z')
+
+debug :: Bool
+debug = False
+
+dprint :: MonadIO m => String -> m ()
+dprint = when debug . liftIO . putStrLn

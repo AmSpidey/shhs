@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, GADTs, RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings, GADTs #-}
 module Parser (parseCmd, doPreprocess, unescaper) where
 
 import Control.Monad
@@ -37,8 +37,6 @@ data EscapingState = EState
   , strSt :: StrState
   }
 
-class Defaultable d where
-  def :: d
 
 instance Defaultable EscapeState where
   def = ENormal
@@ -69,8 +67,7 @@ unescaper = go def
       let rep = def{strSt = strSt e}
       ecpeb <- runParserT pVarNameAndRest "preprocessing" rest -- TODO: this makes preprocessing O(n^2)
       case ecpeb of
-        Left peb -> --do liftIO $ putStrLn $ "Getting variable name failed!\n" ++ errorBundlePretty peb
-                       ('$':) <$> go rep rest
+        Left peb -> ('$':) <$> go rep rest
         Right (name, rest') -> do
           val <- getVarStr name
           (val ++) <$> go rep rest'
@@ -144,6 +141,8 @@ doParseLine :: Text -> Shell Command
 doParseLine t = do
   ecpeb <- runParserT commandParser "input command" t
   either (\peb -> DoNothing <$ liftIO (putStrLn $ errorBundlePretty peb)) return ecpeb
+
+
 -- TODO: maybe one can make those for generic Char streams?
 
 sc :: Parser ()
@@ -263,20 +262,20 @@ pCommand = go Set.empty
           return $ constructCommand name redirectArgs genericArgs
 
 pCommandList :: Parser Command
-pCommandList = foldl1 Pipe <$> pCommand `sepBy1` symbol "|"
+pCommandList = Pipe <$> pCommand `sepBy1` symbol "|"
 
-genericCommandGuide :: ParseGuide [Text]
-genericCommandGuide = Many AnyStr
+-- genericCommandGuide :: ParseGuide [Text]
+-- genericCommandGuide = Many AnyStr
 
-parserFromGuide :: ParseGuide a -> Parser a
-parserFromGuide = go
-  where
-    go :: ParseGuide a -> Parser a
-    go NoArgs = return ()
-    go (Many l) = many (go l)
-    go (a :+: b) = (,) <$> go a <*> go b
-    go (a :>: b) = go a >> go b
-    go (ExactStr s) = symbol (T.pack s)
-    go (Discard a) = void (go a)
-    go AnyStr = genericArgument
-    go AnyInt = integer
+-- parserFromGuide :: ParseGuide a -> Parser a
+-- parserFromGuide = go
+--   where
+--     go :: ParseGuide a -> Parser a
+--     go NoArgs = return ()
+--     go (Many l) = many (go l)
+--     go (a :+: b) = (,) <$> go a <*> go b
+--     go (a :>: b) = go a >> go b
+--     go (ExactStr s) = symbol (T.pack s)
+--     go (Discard a) = void (go a)
+--     go AnyStr = genericArgument
+--     go AnyInt = integer
